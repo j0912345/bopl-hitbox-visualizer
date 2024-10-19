@@ -160,7 +160,7 @@ namespace HitBoxVisualizerPlugin
 
                 if (currBox == null)
                 {
-                    Logger.LogWarning("inputDPhysBoxDict.Values.ToList()[i] == null, removing from array. a round probably ended.");
+                    //Logger.LogWarning("inputDPhysBoxDict.Values.ToList()[i] == null, removing from array. a round probably ended.");
                     inputDPhysBoxDict.Remove(inputDPhysBoxDict.Keys.ToList()[i]);
                     continue;
                 }
@@ -393,7 +393,6 @@ namespace HitBoxVisualizerPlugin
             var amountOfObjsToDelete = gameObjsList.Count - baseIndex;
             for (int i = 0; i < amountOfObjsToDelete; i++)
             {
-                Plugin.AddExternalLogPrintToQueue("current deleting index: "+(baseIndex).ToString() );
                 var currGameObj = gameObjsList[baseIndex];
                 gameObjsList.Remove(currGameObj);
                 GameObject.Destroy(currGameObj);
@@ -648,11 +647,9 @@ namespace HitBoxVisualizerPlugin
                     amountOfUsedHolderObjs++;
                 }
             }
-            Plugin.AddExternalLogPrintToQueue(holderGameObjs.gameObjsList.Count.ToString() + "|" + amountOfUsedHolderObjs.ToString());
             // clean up any unused game objects
             if ((amountOfUsedHolderObjs < holderGameObjs.gameObjsList.Count) && (holderGameObjs.gameObjsList.Count > holderGameObjs.minCapacity))
             {
-                Plugin.AddExternalLogPrintToQueue("deleting after: "+ holderGameObjs.minCapacity.ToString() );
                 holderGameObjs.deleteGameObjectsAfterIndex(holderGameObjs.minCapacity);
             }
             // clear LineRenderer positions on any unused gameObjects, so that we don't get old lines still displaying on screen
