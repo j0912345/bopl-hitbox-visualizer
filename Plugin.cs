@@ -9,6 +9,7 @@ using UnityEngine;
 using BoplFixedMath;
 using static HitBoxVisualizerPlugin.hitboxVisualizerLineStyling;
 using BepInEx.Configuration;
+using UnityEngine.SceneManagement;
 
 namespace HitBoxVisualizerPlugin
 {
@@ -85,12 +86,14 @@ namespace HitBoxVisualizerPlugin
 
             harmony.PatchAll();
             Logger.LogInfo("all DPhysics<shape> objects should now have their hitboxes drawn!");
+            Logger.LogInfo("current Scene (awake): " + SceneManager.GetActiveScene().loadingState);
         }
 
         public void OnDestroy()
         {
             harmony.UnpatchSelf();
-            Logger.LogInfo("hitboxVisualizer has been unloaded.");
+            Logger.LogInfo("current Scene (destroying): " + SceneManager.GetActiveScene().loadingState);
+            Logger.LogError("hitboxVisualizer has been unloaded. (This likely means that `HideManagerGameObject = false` in `BepInEx.cfg`, please enable it!)");
         }
 
         public static void AddExternalLogPrintToQueue(object data)
@@ -279,7 +282,7 @@ namespace HitBoxVisualizerPlugin
             {
                 return;
             }
-
+            Plugin.AddExternalLogPrintToQueue("adding instanceID DPhysicsBox to list:" + instanceID);
             Plugin.DPhysBoxDict.Add(instanceID, __instance);
         }
     }
@@ -301,7 +304,19 @@ namespace HitBoxVisualizerPlugin
                 return;
             }
 
+            Plugin.AddExternalLogPrintToQueue("adding instanceID DPhysicsCircle to list:" + instanceID);
             Plugin.DPhysCircleDict.Add(instanceID, __instance);
+        }
+    }
+
+    [HarmonyPatch(typeof(MainMenu))]
+    class Patch_MainMenuBoplUpdateModBrokenWorkaround
+    {
+        [HarmonyPostfix]
+        [HarmonyPatch(nameof(MainMenu.Awake))]
+        static void Postfix_addUpdaterGameObject(MainMenu __instance)
+        {
+             
         }
     }
 
@@ -312,6 +327,7 @@ namespace HitBoxVisualizerPlugin
     {
         [HarmonyPostfix]
         [HarmonyPatch(nameof(DPhysicsBox.OnDestroyUpdatable))]
+        [HarmonyPatch(nameof(DPhysicsCircle.OnDestroyUpdatable))]
         static void Postfix_addPhysBoxDelHook(MonoUpdatable __instance)
         {
             if (__instance == null)
@@ -328,6 +344,18 @@ namespace HitBoxVisualizerPlugin
             {
                 Plugin.DPhysCircleDict.Remove(__instance.GetInstanceID());
             }
+        }
+    }
+
+    [HarmonyPatch(typeof(CharacterSelectHandler_online))]
+    class Patch_243Workaround
+    {
+        [HarmonyPrefix]
+        [HarmonyPatch(nameof(CharacterSelectHandler_online.CheckForMods))]
+        static bool Postfix_SkipCheckForMods()
+        {
+            Plugin.AddExternalLogPrintToQueue("UNFINISHED!!!!!!!");
+            return false;
         }
     }
 
@@ -404,9 +432,12 @@ namespace HitBoxVisualizerPlugin
         {
             for (int i = startIndex; i < gameObjsList.Count; i++)
             {
-                gameObjsList[i].TryGetComponent(out LineRenderer lineRenderer);
-                lineRenderer.SetPositions([new Vector3(0, 0), new Vector3(0, 0)]);
-                lineRenderer.forceRenderingOff = true;
+                if (gameObjsList[i] != null)
+                {
+                    gameObjsList[i].TryGetComponent(out LineRenderer lineRenderer);
+                    lineRenderer.SetPositions([new Vector3(0, 0), new Vector3(0, 0)]);
+                    lineRenderer.forceRenderingOff = true;
+                }
             }
         }
 
