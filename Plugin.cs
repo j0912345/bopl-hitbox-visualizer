@@ -11,6 +11,32 @@ using static HitBoxVisualizerPlugin.hitboxVisualizerLineStyling;
 using BepInEx.Configuration;
 using UnityEngine.SceneManagement;
 
+
+
+
+
+
+// TODO: use a patch to create a game object on the main menu, which has a monobehavior that we'll use for creating game objects.
+// or something like that. it looks like we can't add game objects to the tree with HideManagerGameObject enabled.
+
+// though it also looks like addGameObjects() isn't getting called for some reason?
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 namespace HitBoxVisualizerPlugin
 {
 
@@ -41,6 +67,7 @@ namespace HitBoxVisualizerPlugin
 
 
         public static int circleDrawing_AmountOfLines = 18;
+        public static Boolean hasStarted = false;
 
         public enum hitboxVisRenderImplementation
         {
@@ -89,11 +116,16 @@ namespace HitBoxVisualizerPlugin
             Logger.LogInfo("current Scene (awake): " + SceneManager.GetActiveScene().loadingState);
         }
 
+        public void Start()
+        {
+            hasStarted = true;
+        }
+
         public void OnDestroy()
         {
             harmony.UnpatchSelf();
             Logger.LogInfo("current Scene (destroying): " + SceneManager.GetActiveScene().loadingState);
-            Logger.LogError("hitboxVisualizer has been unloaded. (This likely means that `HideManagerGameObject = false` in `BepInEx.cfg`, please enable it!)");
+            Logger.LogError("hitboxVisualizer has been unloaded. (if you see this when starting the game, it's likely that `HideManagerGameObject = false` in `BepInEx.cfg`. please enable it!)");
         }
 
         public static void AddExternalLogPrintToQueue(object data)
@@ -102,6 +134,11 @@ namespace HitBoxVisualizerPlugin
             //{
             //    return;
             //}
+
+            if (externalLogMessageQueue == null)
+            {
+                externalLogMessageQueue = [];
+            }
             externalLogMessageQueue.Add(data);
         }
         private void PrintAllExternalLogsInQueue(/*object sender*/)
@@ -347,18 +384,6 @@ namespace HitBoxVisualizerPlugin
         }
     }
 
-    [HarmonyPatch(typeof(CharacterSelectHandler_online))]
-    class Patch_243Workaround
-    {
-        [HarmonyPrefix]
-        [HarmonyPatch(nameof(CharacterSelectHandler_online.CheckForMods))]
-        static bool Postfix_SkipCheckForMods()
-        {
-            Plugin.AddExternalLogPrintToQueue("UNFINISHED!!!!!!!");
-            return false;
-        }
-    }
-
     public class listOfLineHolderGameObjs
     {
         public List<GameObject> gameObjsList = new List<GameObject>();
@@ -368,6 +393,7 @@ namespace HitBoxVisualizerPlugin
 
         public void addGameObjects(int amount)
         {
+            Plugin.AddExternalLogPrintToQueue("###################### addGameObjects called");
             for (int i = 0; i < amount; i++)
             {
                 var currGameObj = new GameObject();
@@ -379,6 +405,7 @@ namespace HitBoxVisualizerPlugin
                 lineRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
 
                 gameObjsList.Add(currGameObj);
+                Plugin.AddExternalLogPrintToQueue("currGameObj == null: " + (currGameObj == null).ToString());
             }
         }
 
@@ -403,6 +430,7 @@ namespace HitBoxVisualizerPlugin
         public void setLineRendererPropsAt(int objListIndex, Vector3 startPos, Vector3 endPos, float thickness, Color lineColor, bool objIsActive = true)
         {
             var currGameObj = gameObjsList[objListIndex];
+            Plugin.AddExternalLogPrintToQueue("[setting renderer props] currGameObj == null: " + (currGameObj == null).ToString() );
 
             // if false this will also make the LineRenderer invisible
             currGameObj.SetActive(objIsActive);
@@ -432,12 +460,10 @@ namespace HitBoxVisualizerPlugin
         {
             for (int i = startIndex; i < gameObjsList.Count; i++)
             {
-                if (gameObjsList[i] != null)
-                {
-                    gameObjsList[i].TryGetComponent(out LineRenderer lineRenderer);
-                    lineRenderer.SetPositions([new Vector3(0, 0), new Vector3(0, 0)]);
-                    lineRenderer.forceRenderingOff = true;
-                }
+                Plugin.AddExternalLogPrintToQueue("cleanUpOldLineRendererPositionsFromGameObjsAfter null game object");
+                gameObjsList[i].TryGetComponent(out LineRenderer lineRenderer);
+                lineRenderer.SetPositions([new Vector3(0, 0), new Vector3(0, 0)]);
+                lineRenderer.forceRenderingOff = true;
             }
         }
 
@@ -666,6 +692,7 @@ namespace HitBoxVisualizerPlugin
                 {
                     holderGameObjs.addGameObjects(amountOfLinesInGroup);
                 }
+                Plugin.AddExternalLogPrintToQueue("amountOfUsedHolderObjs + amountOfLinesInGroup: " + amountOfUsedHolderObjs + amountOfLinesInGroup + " | holderGameObjs.gameObjsList.Count: " + holderGameObjs.gameObjsList.Count);
 
                 for (int j = 0; j < amountOfLinesInGroup; j++)
                 {
