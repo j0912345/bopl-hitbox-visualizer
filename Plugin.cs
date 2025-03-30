@@ -12,26 +12,10 @@ using BepInEx.Configuration;
 using UnityEngine.SceneManagement;
 
 
-
-
-
-
 // TODO: use a patch to create a game object on the main menu, which has a monobehavior that we'll use for creating game objects.
 // or something like that. it looks like we can't add game objects to the tree with HideManagerGameObject enabled.
 
-// though it also looks like addGameObjects() isn't getting called for some reason?
-
-
-
-
-
-
-
-
-
-
-
-
+// though it also looks like addGameObjects() isn't getting called at all, not even just failing to add game objects
 
 
 
@@ -114,6 +98,7 @@ namespace HitBoxVisualizerPlugin
             harmony.PatchAll();
             Logger.LogInfo("all DPhysics<shape> objects should now have their hitboxes drawn!");
             Logger.LogInfo("current Scene (awake): " + SceneManager.GetActiveScene().loadingState);
+            Logger.LogInfo("this.gameObject: "+this.gameObject);
         }
 
         public void Start()
@@ -387,7 +372,7 @@ namespace HitBoxVisualizerPlugin
     public class listOfLineHolderGameObjs
     {
         public List<GameObject> gameObjsList = new List<GameObject>();
-        public int minCapacity = 4;
+        public int minCapacity = 0;
         public int currUsedAmountOfGameObjs = 0;
         public Material lineMaterial = new Material(Shader.Find("Legacy Shaders/Particles/Alpha Blended"));
 
@@ -424,6 +409,7 @@ namespace HitBoxVisualizerPlugin
             {
                 lineMaterial = LineDrawing.lineRendererBaseMaterial;
             }
+            Plugin.AddExternalLogPrintToQueue("listOfLineHolderGameObjs: about to call addGameObjects(minCapacity);");
             addGameObjects(minCapacity);
         }
 
@@ -460,10 +446,12 @@ namespace HitBoxVisualizerPlugin
         {
             for (int i = startIndex; i < gameObjsList.Count; i++)
             {
-                Plugin.AddExternalLogPrintToQueue("cleanUpOldLineRendererPositionsFromGameObjsAfter null game object");
-                gameObjsList[i].TryGetComponent(out LineRenderer lineRenderer);
-                lineRenderer.SetPositions([new Vector3(0, 0), new Vector3(0, 0)]);
-                lineRenderer.forceRenderingOff = true;
+                Plugin.AddExternalLogPrintToQueue("cleanUpOldLineRendererPositionsFromGameObjsAfter() gameobj: " + gameObjsList[i]);
+                if (gameObjsList[i].TryGetComponent(out LineRenderer lineRenderer))
+                {
+                    lineRenderer.SetPositions([new Vector3(0, 0), new Vector3(0, 0)]);
+                    lineRenderer.forceRenderingOff = true;
+                }
             }
         }
 
@@ -674,6 +662,8 @@ namespace HitBoxVisualizerPlugin
             int amountOfUsedHolderObjs = 0;
             listOfLineHolderGameObjs holderGameObjs = Plugin.poolOfLineHolderGameObjs;
 
+            Plugin.AddExternalLogPrintToQueue("lineGroups.Count: " + lineGroups.Count);
+
             for (int i = 0; i < lineGroups.Count/*-1*/; i++) {
 
                 var currLineGroup = lineGroups[i];
@@ -690,6 +680,7 @@ namespace HitBoxVisualizerPlugin
 
                 if (amountOfUsedHolderObjs + amountOfLinesInGroup > holderGameObjs.gameObjsList.Count/* - 1*/)
                 {
+                    Plugin.AddExternalLogPrintToQueue("drawLineGroupAsSplitIntoIndividualLines(): about to call holderGameObjs.addGameObjects(amountOfLinesInGroup);");
                     holderGameObjs.addGameObjects(amountOfLinesInGroup);
                 }
                 Plugin.AddExternalLogPrintToQueue("amountOfUsedHolderObjs + amountOfLinesInGroup: " + amountOfUsedHolderObjs + amountOfLinesInGroup + " | holderGameObjs.gameObjsList.Count: " + holderGameObjs.gameObjsList.Count);
@@ -705,6 +696,7 @@ namespace HitBoxVisualizerPlugin
                     amountOfUsedHolderObjs++;
                 }
             }
+            Plugin.AddExternalLogPrintToQueue("amountOfUsedHolderObjs: " + amountOfUsedHolderObjs + " | holderGameObjs.gameObjsList.Count: " + holderGameObjs.gameObjsList.Count + " | holderGameObjs.minCapacity: "+ holderGameObjs.minCapacity);
             // clean up any unused game objects
             if ((amountOfUsedHolderObjs < holderGameObjs.gameObjsList.Count) && (holderGameObjs.gameObjsList.Count > holderGameObjs.minCapacity))
             {
