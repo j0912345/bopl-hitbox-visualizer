@@ -20,27 +20,20 @@ namespace HitBoxVisualizerPlugin
     {
         // int is the instance ID
         public static Dictionary<int, DPhysicsBox> DPhysBoxDict = [];
+        public static Dictionary<int, DPhysicsCircle> DPhysCircleDict = [];
+        public static Dictionary<int, Circle> CirlceDict = [];
+
         public static listOfLineHolderGameObjs poolOfLineHolderGameObjs = new listOfLineHolderGameObjs();
 
-        // I just need to finish the project already.
         public ConfigEntry<bool> CONFIG_isUsingNoDistortionLineRenderers;
         public ConfigEntry<bool> CONFIG_useBothRectRenderImplementationsAtOnce;
         public ConfigEntry<float> CONFIG_drawingThickness;
 
         public static bool isUsingNoDistortionLineRenderers = true;
         public static bool useBothRectRenderImplementationsAtOnce = false;
-        // to keep the programming simple no specific game objects are tied directly to specific groups of lines or whatever
-        // it's just a random access list of game objects that just hold LineRenderers split into 1 line per LineRenderer
-
-        //public static List<hitboxLineGroup> DPhysObjComponentLines = [];
-
-        public static Dictionary<int, DPhysicsCircle> DPhysCircleDict = [];
-        public static List<hitboxVisualizerLine> DPhysCirclesToDraw = [];
 
         public static List<object> externalLogMessageQueue = [];/* new List<object>(10);*/
         public static float drawingThickness = 0.5f;
-
-
         public static int circleDrawing_AmountOfLines = 18;
 
         public enum hitboxVisRenderImplementation
@@ -161,9 +154,9 @@ namespace HitBoxVisualizerPlugin
 
         public Tuple<List<hitboxLineGroup>, List<hitboxLineGroup>> calculateHitBoxShapeComponentLines(Dictionary<int, DPhysicsBox> inputDPhysBoxDict, Dictionary<int, DPhysicsCircle> inputDPhysCircleDict)
         {
-            // rects (some rects are fine but stuff like missle/shrinked things/drill have a lot of it and it looks bad and is inaccurate)
+            // rects
             var newHitboxLineGroups_NoDistortion = new List<hitboxLineGroup> ();
-            // circles (circles would cost a lot of game objects and also have far less of this distortion in general)
+            // circles
             var newHitboxLineGroups_DistortionAllowed = new List<hitboxLineGroup>();
 
             // CALCULATE RECTS
@@ -239,9 +232,6 @@ namespace HitBoxVisualizerPlugin
                 var circleY = currCircleShape.Pos().y;
 
                 // for some reason the physics engine and class instance have separate varibles for the same property.
-                // for cirlces this might not technically be needed (game version at time of writing is 2.3.4).
-                // note how beam needs a similar patch in order to be drawn correctly.
-                // though it's probably better practice to use the physics engine's values.
                 if (currCircle.initHasBeenCalled)
                 {
                     var physEngineCircleObj = DetPhysics.Get().circles.colliders[DetPhysics.Get().circles.ColliderIndex(currCircle.pp.instanceId)];
@@ -656,7 +646,7 @@ namespace HitBoxVisualizerPlugin
                 for (int j = 0; j < amountOfLinesInGroup; j++)
                 {
                     var line = linesList[j];
-                    var currLineHolderGameObj = holderGameObjs.gameObjsList[amountOfUsedHolderObjs];
+                    //var currLineHolderGameObj = holderGameObjs.gameObjsList[amountOfUsedHolderObjs];
 
 
                     holderGameObjs.setLineRendererPropsAt(amountOfUsedHolderObjs, (Vector3)line.point1, (Vector3)line.point2, currLineGroup.lineThickness, line.lineColor, lineParentObj.activeSelf);
