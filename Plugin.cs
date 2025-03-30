@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2024 Jo912345/J0912345. released under MIT license (see LICENSE.txt file).
+﻿// Copyright (c) 2024/2025 Jo912345/J0912345. released under MIT license (see LICENSE.txt file).
 
 using BepInEx;
 using HarmonyLib;
@@ -10,15 +10,6 @@ using BoplFixedMath;
 using static HitBoxVisualizerPlugin.hitboxVisualizerLineStyling;
 using BepInEx.Configuration;
 using UnityEngine.SceneManagement;
-
-
-// TODO: use a patch to create a game object on the main menu, which has a monobehavior that we'll use for creating game objects.
-// or something like that. it looks like we can't add game objects to the tree with HideManagerGameObject enabled.
-
-// though it also looks like addGameObjects() isn't getting called at all, not even just failing to add game objects
-
-
-
 
 
 namespace HitBoxVisualizerPlugin
@@ -359,7 +350,7 @@ namespace HitBoxVisualizerPlugin
     public class listOfLineHolderGameObjs
     {
         public List<GameObject> gameObjsList = new List<GameObject>();
-        public int minCapacity = 5;
+        public int minCapacity = 4;
         public int currUsedAmountOfGameObjs = 0;
         public Material lineMaterial = new Material(Shader.Find("Legacy Shaders/Particles/Alpha Blended"));
 
