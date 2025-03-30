@@ -51,7 +51,6 @@ namespace HitBoxVisualizerPlugin
 
 
         public static int circleDrawing_AmountOfLines = 18;
-        public static Boolean hasStarted = false;
 
         public enum hitboxVisRenderImplementation
         {
@@ -97,19 +96,18 @@ namespace HitBoxVisualizerPlugin
 
             harmony.PatchAll();
             Logger.LogInfo("all DPhysics<shape> objects should now have their hitboxes drawn!");
-            Logger.LogInfo("current Scene (awake): " + SceneManager.GetActiveScene().loadingState);
-            Logger.LogInfo("this.gameObject: "+this.gameObject);
         }
 
         public void Start()
         {
-            hasStarted = true;
+            // redundant, required for bopl 2.4.3+ for a non-zero minCapacity.
+            // extra game objects are cleaned up at boot by unity in newer versions
+            poolOfLineHolderGameObjs = new listOfLineHolderGameObjs();
         }
 
         public void OnDestroy()
         {
             harmony.UnpatchSelf();
-            Logger.LogInfo("current Scene (destroying): " + SceneManager.GetActiveScene().loadingState);
             Logger.LogError("hitboxVisualizer has been unloaded. (if you see this when starting the game, it's likely that `HideManagerGameObject = false` in `BepInEx.cfg`. please enable it!)");
         }
 
@@ -331,17 +329,6 @@ namespace HitBoxVisualizerPlugin
         }
     }
 
-    [HarmonyPatch(typeof(MainMenu))]
-    class Patch_MainMenuBoplUpdateModBrokenWorkaround
-    {
-        [HarmonyPostfix]
-        [HarmonyPatch(nameof(MainMenu.Awake))]
-        static void Postfix_addUpdaterGameObject(MainMenu __instance)
-        {
-             
-        }
-    }
-
     // note leftovers will get cleaned up by other code that will delete null instances if they end up in the dict anyway
     // mainly that seems to happen at the end of rounds but in case this function either didn't exist or wasn't working everything would still get cleaned eventually
     [HarmonyPatch(typeof(MonoUpdatable))]
@@ -372,13 +359,12 @@ namespace HitBoxVisualizerPlugin
     public class listOfLineHolderGameObjs
     {
         public List<GameObject> gameObjsList = new List<GameObject>();
-        public int minCapacity = 0;
+        public int minCapacity = 5;
         public int currUsedAmountOfGameObjs = 0;
         public Material lineMaterial = new Material(Shader.Find("Legacy Shaders/Particles/Alpha Blended"));
 
         public void addGameObjects(int amount)
         {
-            Plugin.AddExternalLogPrintToQueue("###################### addGameObjects called");
             for (int i = 0; i < amount; i++)
             {
                 var currGameObj = new GameObject();
@@ -390,7 +376,6 @@ namespace HitBoxVisualizerPlugin
                 lineRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
 
                 gameObjsList.Add(currGameObj);
-                Plugin.AddExternalLogPrintToQueue("currGameObj == null: " + (currGameObj == null).ToString());
             }
         }
 
@@ -409,14 +394,12 @@ namespace HitBoxVisualizerPlugin
             {
                 lineMaterial = LineDrawing.lineRendererBaseMaterial;
             }
-            Plugin.AddExternalLogPrintToQueue("listOfLineHolderGameObjs: about to call addGameObjects(minCapacity);");
             addGameObjects(minCapacity);
         }
 
         public void setLineRendererPropsAt(int objListIndex, Vector3 startPos, Vector3 endPos, float thickness, Color lineColor, bool objIsActive = true)
         {
             var currGameObj = gameObjsList[objListIndex];
-            Plugin.AddExternalLogPrintToQueue("[setting renderer props] currGameObj == null: " + (currGameObj == null).ToString() );
 
             // if false this will also make the LineRenderer invisible
             currGameObj.SetActive(objIsActive);
@@ -446,7 +429,6 @@ namespace HitBoxVisualizerPlugin
         {
             for (int i = startIndex; i < gameObjsList.Count; i++)
             {
-                Plugin.AddExternalLogPrintToQueue("cleanUpOldLineRendererPositionsFromGameObjsAfter() gameobj: " + gameObjsList[i]);
                 if (gameObjsList[i].TryGetComponent(out LineRenderer lineRenderer))
                 {
                     lineRenderer.SetPositions([new Vector3(0, 0), new Vector3(0, 0)]);
@@ -662,8 +644,6 @@ namespace HitBoxVisualizerPlugin
             int amountOfUsedHolderObjs = 0;
             listOfLineHolderGameObjs holderGameObjs = Plugin.poolOfLineHolderGameObjs;
 
-            Plugin.AddExternalLogPrintToQueue("lineGroups.Count: " + lineGroups.Count);
-
             for (int i = 0; i < lineGroups.Count/*-1*/; i++) {
 
                 var currLineGroup = lineGroups[i];
@@ -680,11 +660,8 @@ namespace HitBoxVisualizerPlugin
 
                 if (amountOfUsedHolderObjs + amountOfLinesInGroup > holderGameObjs.gameObjsList.Count/* - 1*/)
                 {
-                    Plugin.AddExternalLogPrintToQueue("drawLineGroupAsSplitIntoIndividualLines(): about to call holderGameObjs.addGameObjects(amountOfLinesInGroup);");
                     holderGameObjs.addGameObjects(amountOfLinesInGroup);
                 }
-                Plugin.AddExternalLogPrintToQueue("amountOfUsedHolderObjs + amountOfLinesInGroup: " + amountOfUsedHolderObjs + amountOfLinesInGroup + " | holderGameObjs.gameObjsList.Count: " + holderGameObjs.gameObjsList.Count);
-
                 for (int j = 0; j < amountOfLinesInGroup; j++)
                 {
                     var line = linesList[j];
@@ -696,7 +673,6 @@ namespace HitBoxVisualizerPlugin
                     amountOfUsedHolderObjs++;
                 }
             }
-            Plugin.AddExternalLogPrintToQueue("amountOfUsedHolderObjs: " + amountOfUsedHolderObjs + " | holderGameObjs.gameObjsList.Count: " + holderGameObjs.gameObjsList.Count + " | holderGameObjs.minCapacity: "+ holderGameObjs.minCapacity);
             // clean up any unused game objects
             if ((amountOfUsedHolderObjs < holderGameObjs.gameObjsList.Count) && (holderGameObjs.gameObjsList.Count > holderGameObjs.minCapacity))
             {
