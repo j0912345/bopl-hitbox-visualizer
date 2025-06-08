@@ -25,7 +25,7 @@ namespace HitBoxVisualizerPlugin
         public static listOfLineHolderGameObjs poolOfLineHolderGameObjs = new listOfLineHolderGameObjs();
 
         public ConfigEntry<float> CONFIG_drawingThickness;
-        public ConfigEntry<bool> circleColorScaling;
+        public static ConfigEntry<bool> CONFIG_circleColorScaling;
         // TODO
         /*public ConfigEntry<uint> CONFIG_amountOfEnabledLineColors;
         public ConfigEntry<uint> CONFIG_amountOfDisabledLineColors;
@@ -51,7 +51,7 @@ namespace HitBoxVisualizerPlugin
 
         public static List<object> externalLogMessageQueue = [];
         public static float drawingThickness = 0.5f;
-        public static int circleDrawing_AmountOfLines = 18;
+        public static int circleDrawingMinAmountOfLines = 8;
 
         public enum hitboxVisRenderImplementation
         {
@@ -73,9 +73,14 @@ namespace HitBoxVisualizerPlugin
                 "Drawing Settings",
                 "drawingThickness",
                 0.3f,
-                "How thick should hitbox lines be drawn? Note that this value is in unity world units and not pixels. for reference, 0.2 is relatively thin, and 0.5 is large.\n" +
-                "Another thing to note: the real hitbox for rectangles will always be in the center of the line, so smaller values will look more accurate for rectangles.\n" +
-                "The real hitbox of a circle is always accurate to the outer part of the line.");
+                "How thick should hitbox lines be drawn? Note that this value is in unity world units and not pixels. For reference, 0.2 is relatively thin, and 0.5 is large.\n" +
+                "Unlike older versions, rectangular hitboxes are no longer drawn a bit larger than they actually are, relative to the drawing thickness.");
+
+            CONFIG_circleColorScaling = Config.Bind(
+                "Drawing Settings",
+                "circleColorScaling",
+                true,
+                "Should circles use an amount of colors proportional to their size?");
 
             drawingThickness = CONFIG_drawingThickness.Value;
 
@@ -196,16 +201,12 @@ namespace HitBoxVisualizerPlugin
                 {
                     Vector2 p1 = (Vector2)box_lines[j].point1;
                     Vector2 p2 = (Vector2)box_lines[j].point2;
-                    //float angleRad = Mathf.Atan2(p2.y - p1.y, p2.x - p1.x);
                     float angleRadPlus2Pi = Mathf.Atan2(p2.y - p1.y, p2.x - p1.x) + Mathf.PI/2;
-                    Logger.LogInfo("angle: " + angleRadPlus2Pi.ToString());
                     box_lines[j].point1.x = box_lines[j].point1.x - ((Fix)drawingThickness / (Fix)2) * (Fix)Mathf.Cos((float)angleRadPlus2Pi);
                     box_lines[j].point1.y = box_lines[j].point1.y - ((Fix)drawingThickness / (Fix)2) * (Fix)Mathf.Sin((float)angleRadPlus2Pi);
                     box_lines[j].point2.x = box_lines[j].point2.x - ((Fix)drawingThickness / (Fix)2) * (Fix)Mathf.Cos((float)angleRadPlus2Pi);
                     box_lines[j].point2.y = box_lines[j].point2.y - ((Fix)drawingThickness / (Fix)2) * (Fix)Mathf.Sin((float)angleRadPlus2Pi);
                 }
-
-                var hitboxDrawStyle = hitboxLineGroup.pickLineStyling(currBox);
 
                 newHitboxLineGroups_NoDistortion.Add(new hitboxLineGroup(
                     [
@@ -214,7 +215,7 @@ namespace HitBoxVisualizerPlugin
                     boxLineBottom,
                     boxLineLeft,
                     ],
-                    hitboxDrawStyle,
+                    hitboxLineGroup.pickLineStyling(currBox),
                     currBox.gameObject,
                     drawingThickness));
             }
@@ -232,23 +233,24 @@ namespace HitBoxVisualizerPlugin
                 }
 
                 var currCircleShape = currCircle.Circle();
-                var circleRadius = currCircleShape.radius * currCircle.Scale;
-                var circleCenter = currCircleShape.center;
-                var angleDifferencePerIteration = 360 / circleDrawing_AmountOfLines;
-                var circleX = currCircleShape.Pos().x;
-                var circleY = currCircleShape.Pos().y;
+                Fix circleRadius = currCircleShape.radius * currCircle.Scale;
+                Fix circleX = currCircleShape.Pos().x;
+                Fix circleY = currCircleShape.Pos().y;
 
                 // for some reason the physics engine and class instance have separate varibles for the same property.
                 if (currCircle.initHasBeenCalled)
                 {
                     var physEngineCircleObj = DetPhysics.Get().circles.colliders[DetPhysics.Get().circles.ColliderIndex(currCircle.pp.instanceId)];
                     circleRadius = physEngineCircleObj.radius;
-                    circleCenter = physEngineCircleObj.center;
                     circleX =      physEngineCircleObj.Pos().x;
                     circleY =      physEngineCircleObj.Pos().y;
                 }
 
                 circleRadius -= (Fix)drawingThickness / (Fix)2;
+
+                int circleLineAmount = circleDrawingMinAmountOfLines + (int)(circleRadius * (Fix)6);
+                Logger.LogInfo("circle radius: " + circleRadius.ToString() + " | circleLineAmount: " + circleLineAmount.ToString());
+                float angleDifferencePerIteration = 360f / circleLineAmount;
 
                 List<hitboxVisualizerLine> currCircleLines = [];
                 // setup the initial first position so the loop can be simpler
@@ -256,8 +258,9 @@ namespace HitBoxVisualizerPlugin
                 Vec2 nextStartingCirclePoint = new Vec2(circleX+circleRadius, circleY);
 
                 // yes, j = 1 because nextStartingCirclePoint is already set
-                // we also add +1 for circleDrawing_AmountOfLines because j starts at 1 instead of 0
-                for (int j = 1; j < circleDrawing_AmountOfLines+1; j++)
+                // we also add <strikethrough>+1</strikethrough> for circleDrawing_AmountOfLines because j starts at 1 instead of 0
+                //  I'm not sure why +2 fixes the last points not being drawn sometimes? this is required after I made the amount of lines scale with the radius.
+                for (int j = 1; j < circleLineAmount + 2; j++)
                 {
                     float angle = j * angleDifferencePerIteration * Mathf.Deg2Rad;
                     
@@ -447,12 +450,12 @@ namespace HitBoxVisualizerPlugin
         public static Color BlackColor   = new Color(0, 0, 0, 0.8f);
         public enum lineDrawingStyle
         {
-            defaultV,
+            default5,
             disabledPhys
         }
         public static Dictionary<lineDrawingStyle, List<Color>> drawingStyleToLineColors = new Dictionary<lineDrawingStyle, List<Color>>
         {
-            {lineDrawingStyle.defaultV, [RedColor, BlueColor, GreenColor, YellowColor, MagentaColor]},
+            {lineDrawingStyle.default5, [RedColor, BlueColor, GreenColor, YellowColor, MagentaColor]},
             {lineDrawingStyle.disabledPhys, [BlackColor, WhiteColor]}
         };
     }
@@ -500,14 +503,14 @@ namespace HitBoxVisualizerPlugin
             {
                 return lineDrawingStyle.disabledPhys;
             }
-            return lineDrawingStyle.defaultV;
+            return lineDrawingStyle.default5;
         }
 
         public void UpdateLineColorsToMatchStyle(lineDrawingStyle lineStyle)
         {
             var colorIndex = 0;
             var lineColors = drawingStyleToLineColors[lineStyle];
-            for (int i = 0; i < hitboxVisualLines.Count/* - 1*/; i++)
+            for (int i = 0; i < hitboxVisualLines.Count; i++)
             {
                 if (colorIndex > lineColors.Count - 1)
                 {
@@ -530,8 +533,8 @@ namespace HitBoxVisualizerPlugin
             for (int i = 0; i < hitboxVisualLines.Count-1; i++)
             {
                 var currLine = hitboxVisualLines[i];
-                //linePointsArray.Add(new Vector3((float)currLine.point1.x, (float)currLine.point1.y, 0));
-                linePointsArray.Add(new Vector3((float)currLine.point2.x, (float)currLine.point2.y, 0));
+                linePointsArray.Add(new Vector3((float)currLine.point1.x, (float)currLine.point1.y, 0));
+                //linePointsArray.Add(new Vector3((float)currLine.point2.x, (float)currLine.point2.y, 0));
             }
             return linePointsArray.ToArray();
         }
@@ -542,7 +545,13 @@ namespace HitBoxVisualizerPlugin
             List<GradientAlphaKey> lineGradientAlphas = []; //new GradientAlphaKey[hitboxVisualLines.Count - 1];
             float percentOfLinePerOneColorSegment = 1f/(float)hitboxVisualLines.Count;
 
-            float AmountOfColors = hitboxVisualLines.Count/*-1*/;
+            // TODO:
+            int AmountOfColors = hitboxVisualLines.Count; /* / 3;
+            
+            if (!Plugin.CONFIG_circleColorScaling.Value)
+            {
+                AmountOfColors = hitboxVisualLines.Count;
+            }*/
             // if the circle quality is > 8, drawing circles will attempt to use more colors than a Gradient can have (8 colors max)
             if (AmountOfColors > 8)
             {
@@ -565,9 +574,6 @@ namespace HitBoxVisualizerPlugin
     }
     public class LineDrawing
     {
-        // it'd be a huge waste to search for the shader every time a line is drawn, so it's cached in a variable
-        //public static Material lineRendererBaseMaterial = new Material(Shader.Find("Sprites/Default"));
-        //public static Material lineRendererBaseMaterial = new Material(Shader.Find("Particles/Standard Unlit"));
         public static Material lineRendererBaseMaterial = new Material(Shader.Find("Legacy Shaders/Particles/Alpha Blended"));
 
         public static void setUpLineRendererMaterialToDefault()
@@ -611,6 +617,7 @@ namespace HitBoxVisualizerPlugin
                 lineRenderer.startWidth = lineGroup.lineThickness;
                 lineRenderer.endWidth = lineGroup.lineThickness;
                 lineRenderer.positionCount = newPositions.Length;
+                Plugin.AddExternalLogPrintToQueue(lineRenderer.positionCount);
                 lineRenderer.material.renderQueue = 4999; // have it layer under drawLineGroupAsSplitIntoIndividualLines if both are used so that only the corners of this show up
                 lineRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
 
@@ -632,7 +639,7 @@ namespace HitBoxVisualizerPlugin
             int amountOfUsedHolderObjs = 0;
             listOfLineHolderGameObjs holderGameObjs = Plugin.poolOfLineHolderGameObjs;
 
-            for (int i = 0; i < lineGroups.Count/*-1*/; i++) {
+            for (int i = 0; i < lineGroups.Count; i++) {
 
                 var currLineGroup = lineGroups[i];
                 var lineParentObj = currLineGroup.parentGameObj;
@@ -646,18 +653,14 @@ namespace HitBoxVisualizerPlugin
                 var linesList = currLineGroup.hitboxVisualLines;
                 var amountOfLinesInGroup = linesList.Count;
 
-                if (amountOfUsedHolderObjs + amountOfLinesInGroup > holderGameObjs.gameObjsList.Count/* - 1*/)
+                if (amountOfUsedHolderObjs + amountOfLinesInGroup > holderGameObjs.gameObjsList.Count)
                 {
                     holderGameObjs.addGameObjects(amountOfLinesInGroup);
                 }
                 for (int j = 0; j < amountOfLinesInGroup; j++)
                 {
                     var line = linesList[j];
-                    //var currLineHolderGameObj = holderGameObjs.gameObjsList[amountOfUsedHolderObjs];
-
-
                     holderGameObjs.setLineRendererPropsAt(amountOfUsedHolderObjs, (Vector3)line.point1, (Vector3)line.point2, currLineGroup.lineThickness, line.lineColor, lineParentObj.activeSelf);
-
                     amountOfUsedHolderObjs++;
                 }
             }
