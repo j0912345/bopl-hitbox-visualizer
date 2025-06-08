@@ -51,7 +51,7 @@ namespace HitBoxVisualizerPlugin
 
         public static List<object> externalLogMessageQueue = [];
         public static float drawingThickness = 0.5f;
-        public static int circleDrawingMinAmountOfLines = 8;
+        public static int circleDrawingMinAmountOfLines = 14;
 
         public enum hitboxVisRenderImplementation
         {
@@ -72,7 +72,7 @@ namespace HitBoxVisualizerPlugin
             CONFIG_drawingThickness = Config.Bind(
                 "Drawing Settings",
                 "drawingThickness",
-                0.3f,
+                0.2f,
                 "How thick should hitbox lines be drawn? Note that this value is in unity world units and not pixels. For reference, 0.2 is relatively thin, and 0.5 is large.\n" +
                 "Unlike older versions, rectangular hitboxes are no longer drawn a bit larger than they actually are, relative to the drawing thickness.");
 
@@ -248,7 +248,7 @@ namespace HitBoxVisualizerPlugin
 
                 circleRadius -= (Fix)drawingThickness / (Fix)2;
 
-                int circleLineAmount = circleDrawingMinAmountOfLines + (int)(circleRadius * (Fix)6);
+                int circleLineAmount = circleDrawingMinAmountOfLines + (int)(circleRadius * (Fix)4);
                 Logger.LogInfo("circle radius: " + circleRadius.ToString() + " | circleLineAmount: " + circleLineAmount.ToString());
                 float angleDifferencePerIteration = 360f / circleLineAmount;
 
