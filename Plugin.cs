@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2024/2025 Jo912345/J0912345. released under MIT license (see LICENSE.txt file).
+﻿// Copyright (c) 2024/2025 Jo912345/J0912345. released under the MIT license (see LICENSE.txt file).
 
 using BepInEx;
 using HarmonyLib;
@@ -9,7 +9,6 @@ using UnityEngine;
 using BoplFixedMath;
 using static HitBoxVisualizerPlugin.hitboxVisualizerLineStyling;
 using BepInEx.Configuration;
-using UnityEngine.SceneManagement;
 
 
 namespace HitBoxVisualizerPlugin
@@ -57,7 +56,7 @@ namespace HitBoxVisualizerPlugin
                 "UseNoDistortionRects",
                 true,
                 "A flag which enables using an implementation for drawing rectangles that doesn't have any distortion, but the lines also stop a bit short of meeting at the corners.\n" +
-                "This uses one LineRenderer per line and is how LineRenderer's issues of just not being very good is often worked around." +
+                "This uses one LineRenderer per line, working around LineRenderer's distortion issues." +
                 "If set to false, one LineRenderer will be used per rectangle. This will draw an actual rectangle with corners that meet, but will also cause distortion effects.\n" +
                 "Distortion effects should be less noticable with lower drawing thicknesses.");
             CONFIG_useBothRectRenderImplementationsAtOnce = Config.Bind(
@@ -79,7 +78,7 @@ namespace HitBoxVisualizerPlugin
             drawingThickness = CONFIG_drawingThickness.Value;
 
             harmony.PatchAll();
-            Logger.LogInfo("all DPhysics<shape> objects should now have their hitboxes drawn!");
+            Logger.LogInfo("all `DPhysicsBox`es/`DPhysicsCircle`s should now have their hitboxes drawn!");
         }
 
         public void Start()
@@ -160,8 +159,7 @@ namespace HitBoxVisualizerPlugin
             var newHitboxLineGroups_DistortionAllowed = new List<hitboxLineGroup>();
 
             // CALCULATE RECTS
-            //for (int i = 0; i < inputDPhysBoxDict.Count /*- 1*/; i++)
-            for (int i = 0; i < inputDPhysBoxDict.Values.ToList().Count /*- 1*/; i++)
+            for (int i = 0; i < inputDPhysBoxDict.Values.ToList().Count; i++)
             {
                 var currBox = inputDPhysBoxDict.Values.ToList()[i];
 
@@ -189,27 +187,52 @@ namespace HitBoxVisualizerPlugin
                     boxPointCenter = boxOfCurrBox.center;
                     boxScale = (Fix)1;
                 }
-                var lineThickness = drawingThickness;
 
                 // to make it approximately 500,000x more readable, there's some extra spacing so everything lines up nicely
-                var boxPointUpLeft    = boxScale * (boxPointCenter + boxPointUp - boxPointRight);
-                var boxPointDownLeft  = boxScale * (boxPointCenter - boxPointUp - boxPointRight);
-                var boxPointUpRight   = boxScale * (boxPointCenter + boxPointUp + boxPointRight);
-                var boxPointDownRight = boxScale * (boxPointCenter - boxPointUp + boxPointRight);
+                Vec2 boxPointUpLeft    = boxScale * (boxPointCenter + boxPointUp - boxPointRight);
+                Vec2 boxPointDownLeft  = boxScale * (boxPointCenter - boxPointUp - boxPointRight);
+                Vec2 boxPointUpRight   = boxScale * (boxPointCenter + boxPointUp + boxPointRight);
+                Vec2 boxPointDownRight = boxScale * (boxPointCenter - boxPointUp + boxPointRight);
 
+                hitboxVisualizerLine boxLineTop = new hitboxVisualizerLine(boxPointUpLeft, boxPointUpRight);
+                hitboxVisualizerLine boxLineRight = new hitboxVisualizerLine(boxPointUpRight, boxPointDownRight);
+                hitboxVisualizerLine boxLineBottom = new hitboxVisualizerLine(boxPointDownRight, boxPointDownLeft);
+                hitboxVisualizerLine boxLineLeft = new hitboxVisualizerLine(boxPointDownLeft, boxPointUpLeft);
+                    
+
+                // BUG: we need to move both points on the end of the line, not just each point individually
+                // make lines meet at the corners properly, and make their outer edge the real hitbox edge
+                // also we aren't using the trig functions built into Fix because it has very noticable snapping
+                if (isUsingNoDistortionLineRenderers)
+                {
+                    hitboxVisualizerLine[] box_lines = [boxLineTop, boxLineRight, boxLineBottom, boxLineLeft];
+                    for (int j = 0; j < box_lines.Length - 1; j++)
+                    {
+                        Vector2 p1 = (Vector2)boxLineTop.point1;
+                        Vector2 p2 = (Vector2)boxLineTop.point2;
+                        float angleRad = Mathf.Atan2((p2.y - p1.y), (p2.x - p1.x));
+                        //float angleRad = Mathf.Cos(Vector2.Dot(line_vector2, Vector2.right) / (line_vector2.magnitude * Vector2.right.magnitude));
+                        Logger.LogInfo("angle: " + angleRad.ToString());
+                        box_lines[j].point1.x = box_lines[j].point1.x - ((Fix)drawingThickness / (Fix)2) * (Fix)Mathf.Cos((float)angleRad);
+                        box_lines[j].point1.y = box_lines[j].point1.y - ((Fix)drawingThickness / (Fix)2) * (Fix)Mathf.Sin((float)angleRad);
+                        box_lines[j].point2.x = box_lines[j].point2.x - ((Fix)drawingThickness / (Fix)2) * (Fix)Mathf.Cos((float)angleRad);
+                        box_lines[j].point2.y = box_lines[j].point2.y - ((Fix)drawingThickness / (Fix)2) * (Fix)Mathf.Sin((float)angleRad);
+                        //box_lines[j].y = box_lines[j].y + ((Fix)drawingThickness / (Fix)2) * (Fix)Mathf.Cos((float)angleRad);
+                    }
+                }
 
                 var hitboxDrawStyle = hitboxLineGroup.pickLineStyling(currBox);
 
                 newHitboxLineGroups_NoDistortion.Add(new hitboxLineGroup(
                     [
-                    new hitboxVisualizerLine(boxPointUpLeft,  boxPointUpRight    ),
-                    new hitboxVisualizerLine(boxPointUpRight, boxPointDownRight  ),
-                    new hitboxVisualizerLine(boxPointDownRight, boxPointDownLeft ),
-                    new hitboxVisualizerLine(boxPointDownLeft,  boxPointUpLeft   ),
+                    boxLineTop,
+                    boxLineRight,
+                    boxLineBottom,
+                    boxLineLeft,
                     ],
                     hitboxDrawStyle,
                     currBox.gameObject,
-                    lineThickness));
+                    drawingThickness));
             }
 
             // CALCULATE CIRCLES
