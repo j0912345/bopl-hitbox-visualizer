@@ -249,8 +249,8 @@ namespace HitBoxVisualizerPlugin
                 circleRadius -= (Fix)drawingThickness / (Fix)2;
 
                 int circleLineAmount = circleDrawingMinAmountOfLines + (int)(circleRadius * (Fix)4);
-                Logger.LogInfo("circle radius: " + circleRadius.ToString() + " | circleLineAmount: " + circleLineAmount.ToString());
-                float angleDifferencePerIteration = 360f / circleLineAmount;
+                //Logger.LogInfo("circle radius: " + circleRadius.ToString() + " | circleLineAmount: " + circleLineAmount.ToString());
+                float angleDifferencePerIteration = 360f / (float)circleLineAmount;
 
                 List<hitboxVisualizerLine> currCircleLines = [];
                 // setup the initial first position so the loop can be simpler
@@ -433,7 +433,7 @@ namespace HitBoxVisualizerPlugin
             for (int i = 0; i < gameObjsList.Count; i++)
             {
                 gameObjsList[i].TryGetComponent(out LineRenderer lineRenderer);
-                lineRenderer.SetPositions([]);
+                lineRenderer.SetPositions((Vector3[])[]);
                 lineRenderer.forceRenderingOff = true;
             }
         }
@@ -441,21 +441,21 @@ namespace HitBoxVisualizerPlugin
 
     public struct hitboxVisualizerLineStyling
     {
-        public static Color RedColor     = new Color(1, 0, 0, 0.8f);
-        public static Color BlueColor    = new Color(0, 0, 1, 0.8f);
-        public static Color GreenColor   = new Color(0, 1, 0, 0.8f);
-        public static Color YellowColor  = new Color(1, 0.92f, 0.016f, 0.8f);
-        public static Color MagentaColor = new Color(1, 0, 1, 0.8f);
-        public static Color WhiteColor   = new Color(1, 1, 1, 0.8f);
-        public static Color BlackColor   = new Color(0, 0, 0, 0.8f);
+        public static Color RedColor     = new Color(1, 0, 0, 1f);
+        public static Color BlueColor    = new Color(0, 0, 1, 1f);
+        public static Color GreenColor   = new Color(0, 1, 0, 1f);
+        public static Color YellowColor  = new Color(1, 0.92f, 0.016f, 1f);
+        public static Color MagentaColor = new Color(1, 0, 1, 1f);
+        public static Color WhiteColor   = new Color(1, 1, 1, 1f);
+        public static Color BlackColor   = new Color(0, 0, 0, 1f);
         public enum lineDrawingStyle
         {
-            default5,
+            defaultColors,
             disabledPhys
         }
         public static Dictionary<lineDrawingStyle, List<Color>> drawingStyleToLineColors = new Dictionary<lineDrawingStyle, List<Color>>
         {
-            {lineDrawingStyle.default5, [RedColor, BlueColor, GreenColor, YellowColor, MagentaColor]},
+            {lineDrawingStyle.defaultColors, [RedColor, BlueColor, GreenColor, YellowColor, MagentaColor]},
             {lineDrawingStyle.disabledPhys, [BlackColor, WhiteColor]}
         };
     }
@@ -503,7 +503,7 @@ namespace HitBoxVisualizerPlugin
             {
                 return lineDrawingStyle.disabledPhys;
             }
-            return lineDrawingStyle.default5;
+            return lineDrawingStyle.defaultColors;
         }
 
         public void UpdateLineColorsToMatchStyle(lineDrawingStyle lineStyle)
@@ -543,32 +543,37 @@ namespace HitBoxVisualizerPlugin
         {
             List<GradientColorKey> lineGradientColors = []; //new GradientColorKey[hitboxVisualLines.Count - 1];
             List<GradientAlphaKey> lineGradientAlphas = []; //new GradientAlphaKey[hitboxVisualLines.Count - 1];
-            float percentOfLinePerOneColorSegment = 1f/(float)hitboxVisualLines.Count;
+            //float percentOfLinePerOneColorSegment = 1f/(float)hitboxVisualLines.Count;
 
-            // TODO:
-            int AmountOfColors = hitboxVisualLines.Count; /* / 3;
+
+            int AmountOfColors = (hitboxVisualLines.Count - Plugin.circleDrawingMinAmountOfLines + 4) / 2;
             
             if (!Plugin.CONFIG_circleColorScaling.Value)
             {
                 AmountOfColors = hitboxVisualLines.Count;
-            }*/
+            }
+
             // if the circle quality is > 8, drawing circles will attempt to use more colors than a Gradient can have (8 colors max)
             if (AmountOfColors > 8)
             {
                 AmountOfColors = 8;
-                percentOfLinePerOneColorSegment = 1f / (float)AmountOfColors;
             }
+            float percentOfLinePerOneColorSegment = 1f / (float)AmountOfColors;
 
-            for (int i = 0; i < AmountOfColors; i++)
+            // to make gradients look nicer on the circular hitboxes that use them, we make sure the end and start have the same color
+            for (int i = 0; i < AmountOfColors-1; i++)
             {
                 float gradientLinePos = i * percentOfLinePerOneColorSegment;
-
                 var currLine = hitboxVisualLines[i];
                 lineGradientColors.Add(new GradientColorKey(currLine.lineColor, gradientLinePos));
-                lineGradientAlphas.Add(new GradientAlphaKey(0.8f, gradientLinePos));
+                lineGradientAlphas.Add(new GradientAlphaKey(currLine.lineColor.a, gradientLinePos));
             }
+            lineGradientColors.Add(new GradientColorKey(hitboxVisualLines[0].lineColor, 1));
+            lineGradientAlphas.Add(new GradientAlphaKey(hitboxVisualLines[0].lineColor.a, 1));
+
             Gradient lineGradient = new Gradient();
             lineGradient.SetKeys(lineGradientColors.ToArray(), lineGradientAlphas.ToArray() );
+            lineGradient.mode = GradientMode.PerceptualBlend;
             return lineGradient;
         }
     }
@@ -617,8 +622,7 @@ namespace HitBoxVisualizerPlugin
                 lineRenderer.startWidth = lineGroup.lineThickness;
                 lineRenderer.endWidth = lineGroup.lineThickness;
                 lineRenderer.positionCount = newPositions.Length;
-                Plugin.AddExternalLogPrintToQueue(lineRenderer.positionCount);
-                lineRenderer.material.renderQueue = 4999; // have it layer under drawLineGroupAsSplitIntoIndividualLines if both are used so that only the corners of this show up
+                lineRenderer.material.renderQueue = 4999;
                 lineRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
 
 
