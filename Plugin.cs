@@ -448,15 +448,18 @@ namespace HitBoxVisualizerPlugin
         public static Color MagentaColor = new Color(1, 0, 1, 1f);
         public static Color WhiteColor   = new Color(1, 1, 1, 1f);
         public static Color BlackColor   = new Color(0, 0, 0, 1f);
+        // circles have a separate list of colors that looks nicer in a gradient
         public enum lineDrawingStyle
         {
             defaultColors,
-            disabledPhys
+            disabledPhys,
+            circleColors
         }
         public static Dictionary<lineDrawingStyle, List<Color>> drawingStyleToLineColors = new Dictionary<lineDrawingStyle, List<Color>>
         {
             {lineDrawingStyle.defaultColors, [RedColor, BlueColor, GreenColor, YellowColor, MagentaColor]},
-            {lineDrawingStyle.disabledPhys, [BlackColor, WhiteColor]}
+            {lineDrawingStyle.disabledPhys, [BlackColor, WhiteColor]},
+            {lineDrawingStyle.circleColors, [RedColor, GreenColor, YellowColor, MagentaColor] }
         };
     }
 
@@ -502,6 +505,10 @@ namespace HitBoxVisualizerPlugin
             if (!DPhysObj.enabled)
             {
                 return lineDrawingStyle.disabledPhys;
+            }
+            if (DPhysObj is DPhysicsCircle)
+            {
+                return lineDrawingStyle.circleColors;
             }
             return lineDrawingStyle.defaultColors;
         }
@@ -561,15 +568,15 @@ namespace HitBoxVisualizerPlugin
             float percentOfLinePerOneColorSegment = 1f / (float)AmountOfColors;
 
             // to make gradients look nicer on the circular hitboxes that use them, we make sure the end and start have the same color
-            for (int i = 0; i < AmountOfColors-1; i++)
+            for (int i = 0; i < AmountOfColors/*-1*/; i++)
             {
                 float gradientLinePos = i * percentOfLinePerOneColorSegment;
                 var currLine = hitboxVisualLines[i];
                 lineGradientColors.Add(new GradientColorKey(currLine.lineColor, gradientLinePos));
                 lineGradientAlphas.Add(new GradientAlphaKey(currLine.lineColor.a, gradientLinePos));
             }
-            lineGradientColors.Add(new GradientColorKey(hitboxVisualLines[0].lineColor, 1));
-            lineGradientAlphas.Add(new GradientAlphaKey(hitboxVisualLines[0].lineColor.a, 1));
+            /*lineGradientColors.Add(new GradientColorKey(hitboxVisualLines[0].lineColor, 1));
+            lineGradientAlphas.Add(new GradientAlphaKey(hitboxVisualLines[0].lineColor.a, 1));*/
 
             Gradient lineGradient = new Gradient();
             lineGradient.SetKeys(lineGradientColors.ToArray(), lineGradientAlphas.ToArray() );
