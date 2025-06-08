@@ -24,14 +24,32 @@ namespace HitBoxVisualizerPlugin
 
         public static listOfLineHolderGameObjs poolOfLineHolderGameObjs = new listOfLineHolderGameObjs();
 
-        public ConfigEntry<bool> CONFIG_isUsingNoDistortionLineRenderers;
-        public ConfigEntry<bool> CONFIG_useBothRectRenderImplementationsAtOnce;
         public ConfigEntry<float> CONFIG_drawingThickness;
+        public ConfigEntry<bool> circleColorScaling;
+        // TODO
+        /*public ConfigEntry<uint> CONFIG_amountOfEnabledLineColors;
+        public ConfigEntry<uint> CONFIG_amountOfDisabledLineColors;
 
-        public static bool isUsingNoDistortionLineRenderers = true;
-        public static bool useBothRectRenderImplementationsAtOnce = false;
+        public ConfigEntry<List<float>> CONFIG_enabledLineColor1;
+        public ConfigEntry<List<float>> CONFIG_enabledLineColor2;
+        public ConfigEntry<List<float>> CONFIG_enabledLineColor3;
+        public ConfigEntry<List<float>> CONFIG_enabledLineColor4;
+        public ConfigEntry<List<float>> CONFIG_enabledLineColor5;
+        public ConfigEntry<List<float>> CONFIG_enabledLineColor6;
+        public ConfigEntry<List<float>> CONFIG_enabledLineColor7;
+        public ConfigEntry<List<float>> CONFIG_enabledLineColor8;
 
-        public static List<object> externalLogMessageQueue = [];/* new List<object>(10);*/
+        public ConfigEntry<List<float>> CONFIG_disabledLineColor1;
+        public ConfigEntry<List<float>> CONFIG_disabledLineColor2;
+        public ConfigEntry<List<float>> CONFIG_disabledLineColor3;
+        public ConfigEntry<List<float>> CONFIG_disabledLineColor4;
+        public ConfigEntry<List<float>> CONFIG_disabledLineColor5;
+        public ConfigEntry<List<float>> CONFIG_disabledLineColor6;
+        public ConfigEntry<List<float>> CONFIG_disabledLineColor7;
+        public ConfigEntry<List<float>> CONFIG_disabledLineColor8;*/
+
+
+        public static List<object> externalLogMessageQueue = [];
         public static float drawingThickness = 0.5f;
         public static int circleDrawing_AmountOfLines = 18;
 
@@ -51,20 +69,6 @@ namespace HitBoxVisualizerPlugin
             LineDrawing.setUpLineRendererMaterialToDefault();
             poolOfLineHolderGameObjs.setAllLineRendererMaterials(LineDrawing.lineRendererBaseMaterial);
 
-            CONFIG_isUsingNoDistortionLineRenderers = Config.Bind(
-                "Drawing Settings",
-                "UseNoDistortionRects",
-                true,
-                "A flag which enables using an implementation for drawing rectangles that doesn't have any distortion, but the lines also stop a bit short of meeting at the corners.\n" +
-                "This uses one LineRenderer per line, working around LineRenderer's distortion issues." +
-                "If set to false, one LineRenderer will be used per rectangle. This will draw an actual rectangle with corners that meet, but will also cause distortion effects.\n" +
-                "Distortion effects should be less noticable with lower drawing thicknesses.");
-            CONFIG_useBothRectRenderImplementationsAtOnce = Config.Bind(
-                "Drawing Settings",
-                "useBothRectRenderImplementationsAtOnce",
-                false,
-                "A flag which will make rectangles draw with both the distortion and no distortion implementations at once (see UseNoDistortionRects).\n" +
-                "This is only really going to be visible at higher line thicknesses. Expect to still see some distortion, at least on corners.");
             CONFIG_drawingThickness = Config.Bind(
                 "Drawing Settings",
                 "drawingThickness",
@@ -73,8 +77,6 @@ namespace HitBoxVisualizerPlugin
                 "Another thing to note: the real hitbox for rectangles will always be in the center of the line, so smaller values will look more accurate for rectangles.\n" +
                 "The real hitbox of a circle is always accurate to the outer part of the line.");
 
-            isUsingNoDistortionLineRenderers = CONFIG_isUsingNoDistortionLineRenderers.Value;
-            useBothRectRenderImplementationsAtOnce = CONFIG_useBothRectRenderImplementationsAtOnce.Value;
             drawingThickness = CONFIG_drawingThickness.Value;
 
             harmony.PatchAll();
@@ -135,19 +137,7 @@ namespace HitBoxVisualizerPlugin
 
 
             LineDrawing.drawLinesLineRender(HitboxComponentLines);
-            if (isUsingNoDistortionLineRenderers && !useBothRectRenderImplementationsAtOnce)
-            {
-                LineDrawing.drawLineGroupAsSplitIntoIndividualLines(HitboxComponentLines_NoDistortion);
-            }
-            else if(!isUsingNoDistortionLineRenderers && !useBothRectRenderImplementationsAtOnce)
-            {
-                LineDrawing.drawLinesLineRender(HitboxComponentLines_NoDistortion);
-            }
-            else
-            {
-                LineDrawing.drawLinesLineRender(HitboxComponentLines_NoDistortion);
-                LineDrawing.drawLineGroupAsSplitIntoIndividualLines(HitboxComponentLines_NoDistortion);
-            }
+            LineDrawing.drawLineGroupAsSplitIntoIndividualLines(HitboxComponentLines_NoDistortion);
         }
 
 
@@ -201,21 +191,18 @@ namespace HitBoxVisualizerPlugin
                     
 
                 // make lines meet at the corners properly, and make their outer edge the real hitbox edge
-                if (isUsingNoDistortionLineRenderers)
+                hitboxVisualizerLine[] box_lines = [boxLineTop, boxLineRight, boxLineBottom, boxLineLeft];
+                for (int j = 0; j < box_lines.Length; j++)
                 {
-                    hitboxVisualizerLine[] box_lines = [boxLineTop, boxLineRight, boxLineBottom, boxLineLeft];
-                    for (int j = 0; j < box_lines.Length; j++)
-                    {
-                        Vector2 p1 = (Vector2)box_lines[j].point1;
-                        Vector2 p2 = (Vector2)box_lines[j].point2;
-                        //float angleRad = Mathf.Atan2(p2.y - p1.y, p2.x - p1.x);
-                        float angleRadPlus2Pi = Mathf.Atan2(p2.y - p1.y, p2.x - p1.x) + Mathf.PI/2;
-                        Logger.LogInfo("angle: " + angleRadPlus2Pi.ToString());
-                        box_lines[j].point1.x = box_lines[j].point1.x - ((Fix)drawingThickness / (Fix)2) * (Fix)Mathf.Cos((float)angleRadPlus2Pi);
-                        box_lines[j].point1.y = box_lines[j].point1.y - ((Fix)drawingThickness / (Fix)2) * (Fix)Mathf.Sin((float)angleRadPlus2Pi);
-                        box_lines[j].point2.x = box_lines[j].point2.x - ((Fix)drawingThickness / (Fix)2) * (Fix)Mathf.Cos((float)angleRadPlus2Pi);
-                        box_lines[j].point2.y = box_lines[j].point2.y - ((Fix)drawingThickness / (Fix)2) * (Fix)Mathf.Sin((float)angleRadPlus2Pi);
-                    }
+                    Vector2 p1 = (Vector2)box_lines[j].point1;
+                    Vector2 p2 = (Vector2)box_lines[j].point2;
+                    //float angleRad = Mathf.Atan2(p2.y - p1.y, p2.x - p1.x);
+                    float angleRadPlus2Pi = Mathf.Atan2(p2.y - p1.y, p2.x - p1.x) + Mathf.PI/2;
+                    Logger.LogInfo("angle: " + angleRadPlus2Pi.ToString());
+                    box_lines[j].point1.x = box_lines[j].point1.x - ((Fix)drawingThickness / (Fix)2) * (Fix)Mathf.Cos((float)angleRadPlus2Pi);
+                    box_lines[j].point1.y = box_lines[j].point1.y - ((Fix)drawingThickness / (Fix)2) * (Fix)Mathf.Sin((float)angleRadPlus2Pi);
+                    box_lines[j].point2.x = box_lines[j].point2.x - ((Fix)drawingThickness / (Fix)2) * (Fix)Mathf.Cos((float)angleRadPlus2Pi);
+                    box_lines[j].point2.y = box_lines[j].point2.y - ((Fix)drawingThickness / (Fix)2) * (Fix)Mathf.Sin((float)angleRadPlus2Pi);
                 }
 
                 var hitboxDrawStyle = hitboxLineGroup.pickLineStyling(currBox);

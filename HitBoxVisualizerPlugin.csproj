@@ -7,8 +7,8 @@
     <Version>2.0.0</Version>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <LangVersion>latest</LangVersion>
-    <FileVersion>2.0.0.0</FileVersion>
-    <AssemblyVersion>2.0.0</AssemblyVersion>
+    <FileVersion>3.0.0.0</FileVersion>
+    <AssemblyVersion>3.0.0</AssemblyVersion>
     <Copyright>Copyright (c) 2024 Jo912345/J0912345. released under MIT license (see LICENSE.txt file)</Copyright>
   </PropertyGroup>
 
