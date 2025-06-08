@@ -208,9 +208,8 @@ namespace HitBoxVisualizerPlugin
                     {
                         Vector2 p1 = (Vector2)box_lines[j].point1;
                         Vector2 p2 = (Vector2)box_lines[j].point2;
-                        float angleRad = Mathf.Atan2(p2.y - p1.y, p2.x - p1.x);
-                        float angleRadPlus2Pi = angleRad + Mathf.PI/2;
-                        //float angleRad = Mathf.Cos(Vector2.Dot(line_vector2, Vector2.right) / (line_vector2.magnitude * Vector2.right.magnitude));
+                        //float angleRad = Mathf.Atan2(p2.y - p1.y, p2.x - p1.x);
+                        float angleRadPlus2Pi = Mathf.Atan2(p2.y - p1.y, p2.x - p1.x) + Mathf.PI/2;
                         Logger.LogInfo("angle: " + angleRadPlus2Pi.ToString());
                         box_lines[j].point1.x = box_lines[j].point1.x - ((Fix)drawingThickness / (Fix)2) * (Fix)Mathf.Cos((float)angleRadPlus2Pi);
                         box_lines[j].point1.y = box_lines[j].point1.y - ((Fix)drawingThickness / (Fix)2) * (Fix)Mathf.Sin((float)angleRadPlus2Pi);
