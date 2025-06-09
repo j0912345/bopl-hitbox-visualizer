@@ -25,7 +25,6 @@ namespace HitBoxVisualizerPlugin
         public static listOfLineHolderGameObjs poolOfLineHolderGameObjs = new listOfLineHolderGameObjs();
 
         public ConfigEntry<float> CONFIG_drawingThickness;
-        public static ConfigEntry<bool> CONFIG_circleColorScaling;
         // TODO
         /*public ConfigEntry<uint> CONFIG_amountOfEnabledLineColors;
         public ConfigEntry<uint> CONFIG_amountOfDisabledLineColors;
@@ -75,12 +74,6 @@ namespace HitBoxVisualizerPlugin
                 0.2f,
                 "How thick should hitbox lines be drawn? Note that this value is in unity world units and not pixels. For reference, 0.2 is relatively thin, and 0.5 is large.\n" +
                 "Unlike older versions, rectangular hitboxes are no longer drawn a bit larger than they actually are, relative to the drawing thickness.");
-
-            CONFIG_circleColorScaling = Config.Bind(
-                "Drawing Settings",
-                "circleColorScaling",
-                true,
-                "Should circles use an amount of colors proportional to their size?");
 
             drawingThickness = CONFIG_drawingThickness.Value;
 
@@ -554,33 +547,15 @@ namespace HitBoxVisualizerPlugin
 
         public Gradient getLineGradientForLineColors()
         {
-            List<GradientColorKey> lineGradientColors = []; //new GradientColorKey[hitboxVisualLines.Count - 1];
-            List<GradientAlphaKey> lineGradientAlphas = []; //new GradientAlphaKey[hitboxVisualLines.Count - 1];
-            //float percentOfLinePerOneColorSegment = 1f/(float)hitboxVisualLines.Count;
+            List<GradientColorKey> lineGradientColors = [];
+            List<GradientAlphaKey> lineGradientAlphas = [];
 
             var lineColors = drawingStyleToLineColors[lineGroupStyle];
-
-            //int AmountOfColors = ((hitboxVisualLines.Count - Plugin.circleDrawingMinAmountOfLines) / 2) + 3;
-            //int AmountOfColors = ((hitboxVisualLines.Count - Plugin.circleDrawingMinAmountOfLines) / 2) + 3;
-
-            /*if (!Plugin.CONFIG_circleColorScaling.Value)
-            {
-                AmountOfColors = hitboxVisualLines.Count;
-            }*/
-
-            // if the circle quality is > 8, drawing circles will attempt to use more colors than a Gradient can have (8 colors max)
-            /*if (AmountOfColors > 8)
-            {
-                AmountOfColors = 8;
-            }*/
-            //float percentOfLinePerOneColorSegment = 1f / (float)AmountOfColors;
             float percentOfLinePerOneColorSegment = 1f / (float)lineColors.Count();
 
-            // to make gradients look nicer on the circular hitboxes that use them, we make sure the end and start have the same color
             for (int i = 0; i < lineColors.Count() - 1; i++)
             {
                 float gradientLinePos = i * percentOfLinePerOneColorSegment;
-                //var currLine = hitboxVisualLines[i];
                 lineGradientColors.Add(new GradientColorKey(lineColors[i], gradientLinePos));
                 lineGradientAlphas.Add(new GradientAlphaKey(lineColors[i].a, gradientLinePos));
             }
