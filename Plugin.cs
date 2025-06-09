@@ -25,28 +25,10 @@ namespace HitBoxVisualizerPlugin
         public static listOfLineHolderGameObjs poolOfLineHolderGameObjs = new listOfLineHolderGameObjs();
 
         public ConfigEntry<float> CONFIG_drawingThickness;
-        // TODO
-        /*public ConfigEntry<uint> CONFIG_amountOfEnabledLineColors;
-        public ConfigEntry<uint> CONFIG_amountOfDisabledLineColors;
 
-        public ConfigEntry<List<float>> CONFIG_enabledLineColor1;
-        public ConfigEntry<List<float>> CONFIG_enabledLineColor2;
-        public ConfigEntry<List<float>> CONFIG_enabledLineColor3;
-        public ConfigEntry<List<float>> CONFIG_enabledLineColor4;
-        public ConfigEntry<List<float>> CONFIG_enabledLineColor5;
-        public ConfigEntry<List<float>> CONFIG_enabledLineColor6;
-        public ConfigEntry<List<float>> CONFIG_enabledLineColor7;
-        public ConfigEntry<List<float>> CONFIG_enabledLineColor8;
-
-        public ConfigEntry<List<float>> CONFIG_disabledLineColor1;
-        public ConfigEntry<List<float>> CONFIG_disabledLineColor2;
-        public ConfigEntry<List<float>> CONFIG_disabledLineColor3;
-        public ConfigEntry<List<float>> CONFIG_disabledLineColor4;
-        public ConfigEntry<List<float>> CONFIG_disabledLineColor5;
-        public ConfigEntry<List<float>> CONFIG_disabledLineColor6;
-        public ConfigEntry<List<float>> CONFIG_disabledLineColor7;
-        public ConfigEntry<List<float>> CONFIG_disabledLineColor8;*/
-
+        public ConfigEntry<String> CONFIG_rectColors;
+        public ConfigEntry<String> CONFIG_circleColors;
+        public ConfigEntry<String> CONFIG_disabledColors;
 
         public static List<object> externalLogMessageQueue = [];
         public static float drawingThickness = 0.5f;
@@ -68,23 +50,82 @@ namespace HitBoxVisualizerPlugin
             LineDrawing.setUpLineRendererMaterialToDefault();
             poolOfLineHolderGameObjs.setAllLineRendererMaterials(LineDrawing.lineRendererBaseMaterial);
 
+            loadConfigValues();
+            harmony.PatchAll();
+            Logger.LogInfo("all `DPhysicsBox`es/`DPhysicsCircle`s should now have their hitboxes drawn!");
+        }
+
+        public void loadConfigValues()
+        {
+            // drawing settings
             CONFIG_drawingThickness = Config.Bind(
                 "Drawing Settings",
                 "drawingThickness",
                 0.2f,
                 "How thick should hitbox lines be drawn? Note that this value is in unity world units and not pixels. For reference, 0.2 is relatively thin, and 0.5 is large.\n" +
-                "Unlike older versions, rectangular hitboxes are no longer drawn a bit larger than they actually are, relative to the drawing thickness.");
+                "Rectangular hitboxes are now always drawn accurately, never extending past the real hitbox edge."
+            );
+
+            // line color settings
+            CONFIG_rectColors = Config.Bind(
+                "Line Color Settings",
+                "rectangleColors",
+                "#FF0000FF,#FFEB04FF,#00FF00FF,#0000FFFF",
+                "What colors should rectangles use? Colors are separated by commas. Any colors after the 4th option will be ignored.\n" +
+                "You can use #RGB, #RRGGBB, #RGBA, or #RRGGBBAA formatting, or one of the color words specified here:\n" +
+                "https://docs.unity3d.com/2022.3/Documentation/ScriptReference/ColorUtility.TryParseHtmlString.html");
+            CONFIG_circleColors = Config.Bind(
+                "Line Color Settings",
+                "circleColors",
+                "#FF0000FF,#FFEB04FF,#00FF00FF,#0000FFFF,#FF00FFFF",
+                "What colors should circles use? Colors are separated by commas. You may only use up to 7 colors per the limitations of Unity's `Gradient` class.\n" +
+                "The first color is repeated as the last color to make the gradient loop.\n" +
+                "You can use #RGB, #RRGGBB, #RGBA, or #RRGGBBAA formatting, or one of the color words specified here:\n" +
+                "https://docs.unity3d.com/2022.3/Documentation/ScriptReference/ColorUtility.TryParseHtmlString.html");
+            CONFIG_disabledColors = Config.Bind(
+                "Line Color Settings",
+                "disabledColors",
+                "#000000FF,#FFFFFFFF,#000000FF,#FFFFFFFF",
+                "What colors should disabled objects use? This includes rectanges and circles. Colors are separated by commas.\n" +
+                "You may only use up to 7 colors, per the limitations of Unity's `Gradient` class.\n" +
+                "You can use #RGB, #RRGGBB, #RGBA, or #RRGGBBAA formatting, or one of the color words specified here:\n" +
+                "https://docs.unity3d.com/2022.3/Documentation/ScriptReference/ColorUtility.TryParseHtmlString.html");
+
+            drawingStyleToLineColors[lineDrawingStyle.defaultColors] = loadConfigColorsFromString(CONFIG_rectColors.Value, "rectangleColors", drawingStyleToLineColors[lineDrawingStyle.defaultColors]);
+            drawingStyleToLineColors[lineDrawingStyle.circleColors] = loadConfigColorsFromString(CONFIG_circleColors.Value, "circleColors", drawingStyleToLineColors[lineDrawingStyle.circleColors]);
+            drawingStyleToLineColors[lineDrawingStyle.disabledPhys] = loadConfigColorsFromString(CONFIG_disabledColors.Value, "disabledColors", drawingStyleToLineColors[lineDrawingStyle.disabledPhys]);
+
 
             drawingThickness = CONFIG_drawingThickness.Value;
-
-            harmony.PatchAll();
-            Logger.LogInfo("all `DPhysicsBox`es/`DPhysicsCircle`s should now have their hitboxes drawn!");
+        }
+        public List<Color> loadConfigColorsFromString(String listString, String categoryName, List<Color> normalColors)
+        {
+            String[] colorStrings = listString.Split(',');
+            List<Color> colorList = new List<Color>();
+            Color curColor = new Color();
+            if (colorStrings.Count() == 0)
+            {
+                Logger.LogError("Error reading config: There are no colors specified for " + categoryName + ", falling back to default colors for " + categoryName + " instead.");
+                return normalColors;
+            }
+            foreach (String colorString in colorStrings)
+            {
+                bool success = ColorUtility.TryParseHtmlString(colorString, out curColor);
+                if (!success)
+                {
+                    Logger.LogError("Error reading config: color string \""+ colorString + "\" is invalid, falling back to default colors for " + categoryName + " instead. " +
+                        "Check the config file or https://docs.unity3d.com/2022.3/Documentation/ScriptReference/ColorUtility.TryParseHtmlString.html for formatting options.");
+                    return normalColors;
+                }
+                colorList.Add(curColor);
+            }
+            return colorList;
         }
 
         public void Start()
         {
             // redundant, required for bopl 2.4.3+ for a non-zero minCapacity.
-            // extra game objects are cleaned up at boot by unity in newer versions
+            // extra game objects are cleaned up at boot by unity in newer versions.
             poolOfLineHolderGameObjs = new listOfLineHolderGameObjs();
         }
 
@@ -434,6 +475,8 @@ namespace HitBoxVisualizerPlugin
 
     public struct hitboxVisualizerLineStyling
     {
+        // these are constant but the values in drawingStyleToLineColors get overwritten when the config's color settings load.
+        // if the config is invalid these'll be used as a fallback.
         public static Color RedColor     = new Color(1, 0, 0, 1f);
         public static Color BlueColor    = new Color(0, 0, 1, 1f);
         public static Color GreenColor   = new Color(0, 1, 0, 1f);
@@ -444,7 +487,6 @@ namespace HitBoxVisualizerPlugin
         // TODO: test using these instead of the pure white and black
         public static Color DarkGrey     = new Color(0.2f, 0.2f, 0.2f, 1f);
         public static Color lightGrey    = new Color(0.8f, 0.8f, 0.8f, 1f);
-        // circles have a separate list of colors that looks nicer in a gradient
         public enum lineDrawingStyle
         {
             defaultColors,
@@ -453,9 +495,9 @@ namespace HitBoxVisualizerPlugin
         }
         public static Dictionary<lineDrawingStyle, List<Color>> drawingStyleToLineColors = new Dictionary<lineDrawingStyle, List<Color>>
         {
-            {lineDrawingStyle.defaultColors, [RedColor, BlueColor, GreenColor, YellowColor, MagentaColor]},
+            {lineDrawingStyle.defaultColors, [RedColor, YellowColor, GreenColor, BlueColor, MagentaColor]},
             {lineDrawingStyle.disabledPhys, [BlackColor, WhiteColor]},
-            {lineDrawingStyle.circleColors, [RedColor, YellowColor, GreenColor, BlueColor, MagentaColor] }
+            {lineDrawingStyle.circleColors, [RedColor, YellowColor, GreenColor, BlueColor, MagentaColor]}
         };
     }
 
@@ -553,7 +595,7 @@ namespace HitBoxVisualizerPlugin
             var lineColors = drawingStyleToLineColors[lineGroupStyle];
             float percentOfLinePerOneColorSegment = 1f / (float)lineColors.Count();
 
-            for (int i = 0; i < lineColors.Count() - 1; i++)
+            for (int i = 0; i < lineColors.Count(); i++)
             {
                 float gradientLinePos = i * percentOfLinePerOneColorSegment;
                 lineGradientColors.Add(new GradientColorKey(lineColors[i], gradientLinePos));
