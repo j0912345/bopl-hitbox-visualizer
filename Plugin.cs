@@ -103,11 +103,6 @@ namespace HitBoxVisualizerPlugin
             String[] colorStrings = listString.Split(',');
             List<Color> colorList = new List<Color>();
             Color curColor = new Color();
-            if (colorStrings.Count() == 0)
-            {
-                Logger.LogError("Error reading config: There are no colors specified for " + categoryName + ", falling back to default colors for " + categoryName + " instead.");
-                return normalColors;
-            }
             foreach (String colorString in colorStrings)
             {
                 bool success = ColorUtility.TryParseHtmlString(colorString, out curColor);
