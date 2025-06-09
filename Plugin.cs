@@ -448,6 +448,9 @@ namespace HitBoxVisualizerPlugin
         public static Color MagentaColor = new Color(1, 0, 1, 1f);
         public static Color WhiteColor   = new Color(1, 1, 1, 1f);
         public static Color BlackColor   = new Color(0, 0, 0, 1f);
+        // TODO: test using these instead of the pure white and black
+        public static Color DarkGrey     = new Color(0.2f, 0.2f, 0.2f, 1f);
+        public static Color lightGrey    = new Color(0.8f, 0.8f, 0.8f, 1f);
         // circles have a separate list of colors that looks nicer in a gradient
         public enum lineDrawingStyle
         {
@@ -459,7 +462,7 @@ namespace HitBoxVisualizerPlugin
         {
             {lineDrawingStyle.defaultColors, [RedColor, BlueColor, GreenColor, YellowColor, MagentaColor]},
             {lineDrawingStyle.disabledPhys, [BlackColor, WhiteColor]},
-            {lineDrawingStyle.circleColors, [RedColor, GreenColor, YellowColor, MagentaColor] }
+            {lineDrawingStyle.circleColors, [RedColor, YellowColor, GreenColor, BlueColor, MagentaColor] }
         };
     }
 
@@ -487,6 +490,7 @@ namespace HitBoxVisualizerPlugin
         public List<hitboxVisualizerLine> hitboxVisualLines;
         // a reference some kind of GameObject needed for the lineRenderer implementation, as linerenderers themselves are game objects.
         public GameObject parentGameObj;
+        public lineDrawingStyle lineGroupStyle;
 
         public hitboxLineGroup(List<hitboxVisualizerLine> hitboxLines, lineDrawingStyle lineStyle, GameObject parentGameObject, float lineWidth=0.5f)
         {
@@ -497,6 +501,7 @@ namespace HitBoxVisualizerPlugin
             hitboxVisualLines = hitboxLines;
             parentGameObj = parentGameObject;
             lineThickness = lineWidth;
+            lineGroupStyle = lineStyle;
             UpdateLineColorsToMatchStyle(lineStyle);
         }
 
@@ -515,8 +520,9 @@ namespace HitBoxVisualizerPlugin
 
         public void UpdateLineColorsToMatchStyle(lineDrawingStyle lineStyle)
         {
+            lineGroupStyle = lineStyle;
             var colorIndex = 0;
-            var lineColors = drawingStyleToLineColors[lineStyle];
+            var lineColors = drawingStyleToLineColors[lineGroupStyle];
             for (int i = 0; i < hitboxVisualLines.Count; i++)
             {
                 if (colorIndex > lineColors.Count - 1)
@@ -552,31 +558,34 @@ namespace HitBoxVisualizerPlugin
             List<GradientAlphaKey> lineGradientAlphas = []; //new GradientAlphaKey[hitboxVisualLines.Count - 1];
             //float percentOfLinePerOneColorSegment = 1f/(float)hitboxVisualLines.Count;
 
+            var lineColors = drawingStyleToLineColors[lineGroupStyle];
 
-            int AmountOfColors = (hitboxVisualLines.Count - Plugin.circleDrawingMinAmountOfLines + 4) / 2;
-            
-            if (!Plugin.CONFIG_circleColorScaling.Value)
+            //int AmountOfColors = ((hitboxVisualLines.Count - Plugin.circleDrawingMinAmountOfLines) / 2) + 3;
+            //int AmountOfColors = ((hitboxVisualLines.Count - Plugin.circleDrawingMinAmountOfLines) / 2) + 3;
+
+            /*if (!Plugin.CONFIG_circleColorScaling.Value)
             {
                 AmountOfColors = hitboxVisualLines.Count;
-            }
+            }*/
 
             // if the circle quality is > 8, drawing circles will attempt to use more colors than a Gradient can have (8 colors max)
-            if (AmountOfColors > 8)
+            /*if (AmountOfColors > 8)
             {
                 AmountOfColors = 8;
-            }
-            float percentOfLinePerOneColorSegment = 1f / (float)AmountOfColors;
+            }*/
+            //float percentOfLinePerOneColorSegment = 1f / (float)AmountOfColors;
+            float percentOfLinePerOneColorSegment = 1f / (float)lineColors.Count();
 
             // to make gradients look nicer on the circular hitboxes that use them, we make sure the end and start have the same color
-            for (int i = 0; i < AmountOfColors/*-1*/; i++)
+            for (int i = 0; i < lineColors.Count() - 1; i++)
             {
                 float gradientLinePos = i * percentOfLinePerOneColorSegment;
-                var currLine = hitboxVisualLines[i];
-                lineGradientColors.Add(new GradientColorKey(currLine.lineColor, gradientLinePos));
-                lineGradientAlphas.Add(new GradientAlphaKey(currLine.lineColor.a, gradientLinePos));
+                //var currLine = hitboxVisualLines[i];
+                lineGradientColors.Add(new GradientColorKey(lineColors[i], gradientLinePos));
+                lineGradientAlphas.Add(new GradientAlphaKey(lineColors[i].a, gradientLinePos));
             }
-            /*lineGradientColors.Add(new GradientColorKey(hitboxVisualLines[0].lineColor, 1));
-            lineGradientAlphas.Add(new GradientAlphaKey(hitboxVisualLines[0].lineColor.a, 1));*/
+            lineGradientColors.Add(new GradientColorKey(lineColors[0], 1));
+            lineGradientAlphas.Add(new GradientAlphaKey(lineColors[0].a, 1));
 
             Gradient lineGradient = new Gradient();
             lineGradient.SetKeys(lineGradientColors.ToArray(), lineGradientAlphas.ToArray() );
