@@ -1,10 +1,10 @@
 # bopl battle hitbox visualizer
 A mod for bopl battle which draws lines around hitboxes. made by Jo912345.
 
-# IMPORTANT NOTES
-- The real hitbox of rectanlges is in the center of the lines drawn on screen. Higher line thicknesses thus will extend further from the real hitbox.
-- The real hitboxes of circles are always drawn exactly, no matter the line thickness. Higher line thicknesses will have more inwards padding but won't extend past the real hitbox.
-- Shapes that are mulit-colored are internally marked as active, and black and white if internally marked as disabled.
+# Notes
+- As of version 3.0.0, rectangular hitboxes are now always drawn 100% accurately. In old versions the drawn hitbox edge extended half of the line thickness past the real hitbox edge, and the corners didn't quite connect.
+- Circular hitboxes are and always were drawn accurately, no matter the line thickness.
+- Shapes that are multi-colored are internally marked as active, and black and white if internally marked as disabled. (assuming a default color config).
 
 # Credits
 - Programming:
