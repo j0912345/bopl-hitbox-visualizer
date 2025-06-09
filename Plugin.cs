@@ -63,42 +63,46 @@ namespace HitBoxVisualizerPlugin
                 "drawingThickness",
                 0.2f,
                 "How thick should hitbox lines be drawn? Note that this value is in unity world units and not pixels. For reference, 0.2 is relatively thin, and 0.5 is large.\n" +
-                "Rectangular hitboxes are now always drawn accurately, never extending past the real hitbox edge."
+                "Rectangular hitboxes are now always drawn accurately, never extending past the real hitbox edge (excluding small artifacts caused by a lack of anti-aliasing)."
             );
 
             // line color settings
             CONFIG_rectColors = Config.Bind(
                 "Line Color Settings",
                 "rectangleColors",
-                "#FF0000FF,#FFEB04FF,#00FF00FF,#0000FFFF",
+                "#FF0000CC,#FFEB04CC,#00FF00CC,#0000FFCC",
                 "What colors should rectangles use? Colors are separated by commas. Any colors after the 4th option will be ignored.\n" +
                 "You can use #RGB, #RRGGBB, #RGBA, or #RRGGBBAA formatting, or one of the color words specified here:\n" +
                 "https://docs.unity3d.com/2022.3/Documentation/ScriptReference/ColorUtility.TryParseHtmlString.html");
             CONFIG_circleColors = Config.Bind(
                 "Line Color Settings",
                 "circleColors",
-                "#FF0000FF,#FFEB04FF,#00FF00FF,#0000FFFF,#FF00FFFF",
+                "#FF0000CC,#FFEB04CC,#00FF00CC,#0000FFCC,#FF00FFCC",
                 "What colors should circles use? Colors are separated by commas. You may only use up to 7 colors per the limitations of Unity's `Gradient` class.\n" +
-                "The first color is repeated as the last color to make the gradient loop.\n" +
+                "The first color is also used as the last color to loop the gradient.\n" +
                 "You can use #RGB, #RRGGBB, #RGBA, or #RRGGBBAA formatting, or one of the color words specified here:\n" +
                 "https://docs.unity3d.com/2022.3/Documentation/ScriptReference/ColorUtility.TryParseHtmlString.html");
             CONFIG_disabledColors = Config.Bind(
                 "Line Color Settings",
                 "disabledColors",
-                "#000000FF,#FFFFFFFF,#000000FF,#FFFFFFFF",
+                "#000000CC,#FFFFFFCC,#000000CC,#FFFFFFCC",
                 "What colors should disabled objects use? This includes rectanges and circles. Colors are separated by commas.\n" +
-                "You may only use up to 7 colors, per the limitations of Unity's `Gradient` class.\n" +
+                "You may only use up to 7 colors (the gradient is looped), per the limitations of Unity's `Gradient` class.\n" +
                 "You can use #RGB, #RRGGBB, #RGBA, or #RRGGBBAA formatting, or one of the color words specified here:\n" +
                 "https://docs.unity3d.com/2022.3/Documentation/ScriptReference/ColorUtility.TryParseHtmlString.html");
 
-            drawingStyleToLineColors[lineDrawingStyle.defaultColors] = loadConfigColorsFromString(CONFIG_rectColors.Value, "rectangleColors", drawingStyleToLineColors[lineDrawingStyle.defaultColors]);
-            drawingStyleToLineColors[lineDrawingStyle.circleColors] = loadConfigColorsFromString(CONFIG_circleColors.Value, "circleColors", drawingStyleToLineColors[lineDrawingStyle.circleColors]);
-            drawingStyleToLineColors[lineDrawingStyle.disabledPhys] = loadConfigColorsFromString(CONFIG_disabledColors.Value, "disabledColors", drawingStyleToLineColors[lineDrawingStyle.disabledPhys]);
+            drawingStyleToLineColors[lineDrawingStyle.defaultColors] = loadConfigColorsFromString(CONFIG_rectColors.Value, "rectangleColors",
+                drawingStyleToLineColors[lineDrawingStyle.defaultColors], false);
 
+            drawingStyleToLineColors[lineDrawingStyle.circleColors] = loadConfigColorsFromString(CONFIG_circleColors.Value, "circleColors",
+                drawingStyleToLineColors[lineDrawingStyle.circleColors]);
+
+            drawingStyleToLineColors[lineDrawingStyle.disabledPhys] = loadConfigColorsFromString(CONFIG_disabledColors.Value, "disabledColors",
+                drawingStyleToLineColors[lineDrawingStyle.disabledPhys]);
 
             drawingThickness = CONFIG_drawingThickness.Value;
         }
-        public List<Color> loadConfigColorsFromString(String listString, String categoryName, List<Color> normalColors)
+        public List<Color> loadConfigColorsFromString(String listString, String categoryName, List<Color> normalColors, bool gradientColorLimit = true)
         {
             String[] colorStrings = listString.Split(',');
             List<Color> colorList = new List<Color>();
@@ -113,6 +117,12 @@ namespace HitBoxVisualizerPlugin
                     return normalColors;
                 }
                 colorList.Add(curColor);
+            }
+            if (gradientColorLimit && colorList.Count() > 7)
+            {
+                Logger.LogError("color string \"" + listString + "\" is invalid, falling back to default colors for " + categoryName + " instead. " +
+                    "Using more than 7 colors (the gradient is looped) in a gradient is not supported, due to a unity limitation.");
+                return normalColors;
             }
             return colorList;
         }
