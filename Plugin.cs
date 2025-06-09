@@ -108,7 +108,7 @@ namespace HitBoxVisualizerPlugin
                 bool success = ColorUtility.TryParseHtmlString(colorString, out curColor);
                 if (!success)
                 {
-                    Logger.LogError("Error reading config: color string \""+ colorString + "\" is invalid, falling back to default colors for " + categoryName + " instead. " +
+                    Logger.LogError("color string \""+ colorString + "\" is invalid, falling back to default colors for " + categoryName + " instead. " +
                         "Check the config file or https://docs.unity3d.com/2022.3/Documentation/ScriptReference/ColorUtility.TryParseHtmlString.html for formatting options.");
                     return normalColors;
                 }
