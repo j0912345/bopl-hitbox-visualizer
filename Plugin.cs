@@ -413,13 +413,13 @@ namespace HitBoxVisualizerPlugin
             {
                 Plugin.DPhysBoxDict.Remove(__instance.GetInstanceID());
                 var instanceID = __instance.GetInstanceID();
-                Plugin.AddExternalLogPrintToQueue("removing instanceID DPhysicsCircle to list:" + instanceID);
+                Plugin.AddExternalLogPrintToQueue("removing instanceID DPhysicsBox from list:" + instanceID);
             }
             else if (instanceClassName == "DPhysicsCircle")
             {
                 Plugin.DPhysCircleDict.Remove(__instance.GetInstanceID());
                 var instanceID = __instance.GetInstanceID();
-                Plugin.AddExternalLogPrintToQueue("removing instanceID DPhysicsCircle to list:" + instanceID);
+                Plugin.AddExternalLogPrintToQueue("removing instanceID DPhysicsCircle from list:" + instanceID);
             }
         }
     }
