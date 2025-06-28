@@ -189,6 +189,8 @@ namespace HitBoxVisualizerPlugin
         // TODO: add a bright pink line color or something for `Update()` hitboxes. also add a config for also using `Update()`.
 
 
+        // TODO: add raycasts and make raycasted objects have a different hitbox color
+        // there's raycasting in detphysics but check other places
 
 
 
@@ -204,23 +206,23 @@ namespace HitBoxVisualizerPlugin
 
 
 
-
-        /*public void Update()
+       /*public void Update()
         {
-            updateHitboxes();
+            updateHitboxes(false);
         }*/
 
-        // the lineRenderer lags behind if LateUpdate isn't used
+        // <strikethrough>the lineRenderer lags behind if LateUpdate isn't used</strikethrough>
+        // nevermind, i guess not anymore? (currently writing during 2.5.0). maybe part of using values from the physics engine.
         public void LateUpdate()
         {
-            updateHitboxes();
+            updateHitboxes(true);
         }
 
-        public void updateHitboxes()
+        public void updateHitboxes(bool isLateUpdate)
         {
             PrintAllExternalLogsInQueue();
 
-            var ListOflineGroupTuple = calculateHitBoxShapeComponentLines(DPhysBoxDict, DPhysCircleDict);
+            var ListOflineGroupTuple = calculateHitBoxShapeComponentLines(DPhysBoxDict, DPhysCircleDict, isLateUpdate);
             // circles already have very little distortion (likely due to their much shallower turns at each point)
             // and would also cost a ton of extra line holder game objects to render with 1 game object per line.
             // rects
@@ -234,7 +236,7 @@ namespace HitBoxVisualizerPlugin
         }
 
 
-        public Tuple<List<hitboxLineGroup>, List<hitboxLineGroup>> calculateHitBoxShapeComponentLines(Dictionary<int, DPhysicsBox> inputDPhysBoxDict, Dictionary<int, DPhysicsCircle> inputDPhysCircleDict)
+        public Tuple<List<hitboxLineGroup>, List<hitboxLineGroup>> calculateHitBoxShapeComponentLines(Dictionary<int, DPhysicsBox> inputDPhysBoxDict, Dictionary<int, DPhysicsCircle> inputDPhysCircleDict, bool isLateUpdate=true)
         {
             // rects
             var newHitboxLineGroups_NoDistortion = new List<hitboxLineGroup> ();
@@ -303,7 +305,7 @@ namespace HitBoxVisualizerPlugin
                     boxLineBottom,
                     boxLineLeft,
                     ],
-                    hitboxLineGroup.pickLineStyling(currBox),
+                    hitboxLineGroup.pickLineStyling(currBox, isLateUpdate),
                     currBox.gameObject,
                     drawingThickness));
             }
@@ -359,7 +361,7 @@ namespace HitBoxVisualizerPlugin
                     nextStartingCirclePoint = newCirclePoint;
                 }
 
-                newHitboxLineGroups_DistortionAllowed.Add(new hitboxLineGroup(currCircleLines, hitboxLineGroup.pickLineStyling(currCircle), currCircle.gameObject, drawingThickness));
+                newHitboxLineGroups_DistortionAllowed.Add(new hitboxLineGroup(currCircleLines, hitboxLineGroup.pickLineStyling(currCircle, isLateUpdate), currCircle.gameObject, drawingThickness));
             }
 
             return Tuple.Create(newHitboxLineGroups_NoDistortion, newHitboxLineGroups_DistortionAllowed);
@@ -550,13 +552,15 @@ namespace HitBoxVisualizerPlugin
         {
             defaultColors,
             disabledPhys,
-            circleColors
+            circleColors,
+            UpdateWithoutLateUpdate
         }
         public static Dictionary<lineDrawingStyle, List<Color>> drawingStyleToLineColors = new Dictionary<lineDrawingStyle, List<Color>>
         {
             {lineDrawingStyle.defaultColors, [RedColor, YellowColor, GreenColor, BlueColor, MagentaColor]},
             {lineDrawingStyle.disabledPhys, [BlackColor, WhiteColor]},
-            {lineDrawingStyle.circleColors, [RedColor, YellowColor, GreenColor, BlueColor, MagentaColor]}
+            {lineDrawingStyle.circleColors, [RedColor, YellowColor, GreenColor, BlueColor, MagentaColor]},
+            {lineDrawingStyle.UpdateWithoutLateUpdate, [MagentaColor, MagentaColor, MagentaColor, MagentaColor] }
         };
     }
 
@@ -599,8 +603,12 @@ namespace HitBoxVisualizerPlugin
             UpdateLineColorsToMatchStyle(lineStyle);
         }
 
-        public static lineDrawingStyle pickLineStyling(IPhysicsCollider DPhysObj)
+        public static lineDrawingStyle pickLineStyling(IPhysicsCollider DPhysObj, bool isLateUpdate=true)
         {
+            if (!isLateUpdate)
+            {
+                return lineDrawingStyle.UpdateWithoutLateUpdate;
+            }
             if (!DPhysObj.enabled)
             {
                 return lineDrawingStyle.disabledPhys;
