@@ -166,8 +166,41 @@ namespace HitBoxVisualizerPlugin
             externalLogMessageQueue = [];
         }
 
+        // using both Update() and LateUpdate() might(?) increase accuracy for weird interframe stuff but it's genuinely hard to tell. 
+        // it would catch hitboxes that exist during `Update()` but don't during `LateUpdate` (if any like that exist).
+        // I think they do, but in that case the game doesn't seem to fully process them. meteor can be seen deleting(?) hitboxes for a frame sometimes,
+        // including seemingly deleting a player's hitbox.
+
+
+
+
+
+
+
+        // TESTING IDEA: option to give each game object randomized colors(?)
+
+
+
+
+
+
+
+
+
+        // I'm tired of looking at clips frame by frame and there aren't any (good) TAS tools for this game (I've tested, libTAS has issues).
+        // maybe I'll make a replay editor someday...
+        /*public void Update()
+        {
+            updateHitboxes();
+        }*/
+
         // the lineRenderer lags behind if LateUpdate isn't used
         public void LateUpdate()
+        {
+            updateHitboxes();
+        }
+
+        public void updateHitboxes()
         {
             PrintAllExternalLogsInQueue();
 
@@ -199,7 +232,7 @@ namespace HitBoxVisualizerPlugin
 
                 if (currBox == null)
                 {
-                    //Logger.LogWarning("inputDPhysBoxDict.Values.ToList()[i] == null, removing from array. a round probably ended.");
+                    Logger.LogWarning("inputDPhysBoxDict.Values.ToList()[i] == null, removing from array. a round probably ended.");
                     inputDPhysBoxDict.Remove(inputDPhysBoxDict.Keys.ToList()[i]);
                     continue;
                 }
@@ -268,6 +301,7 @@ namespace HitBoxVisualizerPlugin
                 if (currCircle == null)
                 {
                     inputDPhysCircleDict.Remove(inputDPhysCircleDict.Keys.ToList()[i]);
+                    Logger.LogWarning("inputDPhysCircleDict.Values.ToList()[i] == null, removing from array. a round probably ended.");
                     continue;
                 }
 
@@ -378,10 +412,14 @@ namespace HitBoxVisualizerPlugin
             if (instanceClassName == "DPhysicsBox")
             {
                 Plugin.DPhysBoxDict.Remove(__instance.GetInstanceID());
+                var instanceID = __instance.GetInstanceID();
+                Plugin.AddExternalLogPrintToQueue("removing instanceID DPhysicsCircle to list:" + instanceID);
             }
             else if (instanceClassName == "DPhysicsCircle")
             {
                 Plugin.DPhysCircleDict.Remove(__instance.GetInstanceID());
+                var instanceID = __instance.GetInstanceID();
+                Plugin.AddExternalLogPrintToQueue("removing instanceID DPhysicsCircle to list:" + instanceID);
             }
         }
     }
