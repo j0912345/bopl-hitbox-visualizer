@@ -172,6 +172,39 @@ namespace HitBoxVisualizerPlugin
         // including seemingly deleting a player's hitbox. after adding code to list when stuff is removed though it doesn't look like it actually is?
         // I'm tired of looking at clips frame by frame and there aren't any (good) TAS tools for this game (I've tested, libTAS has issues).
         // maybe I'll make a replay editor someday...
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        // TODO: add a bright pink line color or something for `Update()` hitboxes. also add a config for also using `Update()`.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         /*public void Update()
         {
             updateHitboxes();
