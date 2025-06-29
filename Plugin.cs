@@ -167,62 +167,36 @@ namespace HitBoxVisualizerPlugin
         }
 
         // using both Update() and LateUpdate() might(?) increase accuracy for weird interframe stuff but it's genuinely hard to tell. 
-        // it would catch hitboxes that exist during `Update()` but don't during `LateUpdate` (if any like that exist).
-        // I think they do, but in that case the game doesn't seem to fully process them. meteor can be seen deleting(?) hitboxes for a frame sometimes,
-        // including seemingly deleting a player's hitbox. after adding code to list when stuff is removed though it doesn't look like it actually is?
+        // meteor for example will often seemingly "delete" hitboxes for a frame, but only if im not using both Update() and LateUpdate().
+        // thing is that these hitboxes might not be fully "processed" by the game, so I may not want to draw them?
+        // I've tried using both with Update() as only pink, but it doesn't seem to do anything; meteor can't disappear hitboxes, but it looks like no hitboxes get drawn as pink.
+        // it's also inconsistent, and it's really time consuming and annoying to record and check frame by frame with a video editor.
         // I'm tired of looking at clips frame by frame and there aren't any (good) TAS tools for this game (I've tested, libTAS has issues).
         // maybe I'll make a replay editor someday...
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-        // TODO: add a bright pink line color or something for `Update()` hitboxes. also add a config for also using `Update()`.
-
-
         // TODO: add raycasts and make raycasted objects have a different hitbox color
-        // there's raycasting in detphysics but check other places
+        // there's raycasting/interesting stuff in:
+        // * DetPhysics (mostly calls from Raycast?)
+        // * Raycast
+        // * Tools
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-       /*public void Update()
+        /*public void Update()
         {
-            updateHitboxes(false);
+            updateHitboxes();
         }*/
 
         // <strikethrough>the lineRenderer lags behind if LateUpdate isn't used</strikethrough>
         // nevermind, i guess not anymore? (currently writing during 2.5.0). maybe part of using values from the physics engine.
         public void LateUpdate()
         {
-            updateHitboxes(true);
+            updateHitboxes();
         }
 
-        public void updateHitboxes(bool isLateUpdate)
+        public void updateHitboxes()
         {
             PrintAllExternalLogsInQueue();
 
-            var ListOflineGroupTuple = calculateHitBoxShapeComponentLines(DPhysBoxDict, DPhysCircleDict, isLateUpdate);
+            var ListOflineGroupTuple = calculateHitBoxShapeComponentLines(DPhysBoxDict, DPhysCircleDict);
             // circles already have very little distortion (likely due to their much shallower turns at each point)
             // and would also cost a ton of extra line holder game objects to render with 1 game object per line.
             // rects
@@ -232,11 +206,11 @@ namespace HitBoxVisualizerPlugin
 
 
             LineDrawing.drawLinesLineRender(HitboxComponentLines);
-            LineDrawing.drawLineGroupAsSplitIntoIndividualLines(HitboxComponentLines_NoDistortion);
+            LineDrawing.drawLinesIndividuallyWithHolderGameObjects(HitboxComponentLines_NoDistortion);
         }
 
 
-        public Tuple<List<hitboxLineGroup>, List<hitboxLineGroup>> calculateHitBoxShapeComponentLines(Dictionary<int, DPhysicsBox> inputDPhysBoxDict, Dictionary<int, DPhysicsCircle> inputDPhysCircleDict, bool isLateUpdate=true)
+        public Tuple<List<hitboxLineGroup>, List<hitboxLineGroup>> calculateHitBoxShapeComponentLines(Dictionary<int, DPhysicsBox> inputDPhysBoxDict, Dictionary<int, DPhysicsCircle> inputDPhysCircleDict/*, bool isLateUpdate=true*/)
         {
             // rects
             var newHitboxLineGroups_NoDistortion = new List<hitboxLineGroup> ();
@@ -305,7 +279,7 @@ namespace HitBoxVisualizerPlugin
                     boxLineBottom,
                     boxLineLeft,
                     ],
-                    hitboxLineGroup.pickLineStyling(currBox, isLateUpdate),
+                    hitboxLineGroup.pickLineStyling(currBox/*, isLateUpdate*/),
                     currBox.gameObject,
                     drawingThickness));
             }
@@ -361,7 +335,7 @@ namespace HitBoxVisualizerPlugin
                     nextStartingCirclePoint = newCirclePoint;
                 }
 
-                newHitboxLineGroups_DistortionAllowed.Add(new hitboxLineGroup(currCircleLines, hitboxLineGroup.pickLineStyling(currCircle, isLateUpdate), currCircle.gameObject, drawingThickness));
+                newHitboxLineGroups_DistortionAllowed.Add(new hitboxLineGroup(currCircleLines, hitboxLineGroup.pickLineStyling(currCircle/*, isLateUpdate*/), currCircle.gameObject, drawingThickness));
             }
 
             return Tuple.Create(newHitboxLineGroups_NoDistortion, newHitboxLineGroups_DistortionAllowed);
@@ -552,15 +526,15 @@ namespace HitBoxVisualizerPlugin
         {
             defaultColors,
             disabledPhys,
-            circleColors,
-            UpdateWithoutLateUpdate
+            circleColors/*,
+            UpdateWithoutLateUpdate*/
         }
         public static Dictionary<lineDrawingStyle, List<Color>> drawingStyleToLineColors = new Dictionary<lineDrawingStyle, List<Color>>
         {
             {lineDrawingStyle.defaultColors, [RedColor, YellowColor, GreenColor, BlueColor, MagentaColor]},
             {lineDrawingStyle.disabledPhys, [BlackColor, WhiteColor]},
             {lineDrawingStyle.circleColors, [RedColor, YellowColor, GreenColor, BlueColor, MagentaColor]},
-            {lineDrawingStyle.UpdateWithoutLateUpdate, [MagentaColor, MagentaColor, MagentaColor, MagentaColor] }
+            /*{lineDrawingStyle.UpdateWithoutLateUpdate, [MagentaColor, MagentaColor, MagentaColor, MagentaColor] }*/
         };
     }
 
@@ -586,7 +560,6 @@ namespace HitBoxVisualizerPlugin
     {
         public float lineThickness;
         public List<hitboxVisualizerLine> hitboxVisualLines;
-        // a reference some kind of GameObject needed for the lineRenderer implementation, as linerenderers themselves are game objects.
         public GameObject parentGameObj;
         public lineDrawingStyle lineGroupStyle;
 
@@ -594,6 +567,7 @@ namespace HitBoxVisualizerPlugin
         {
             if (parentGameObject == null)
             {
+                Plugin.AddExternalLogPrintToQueue("hitboxLineGroup: parentGameObject == null");
                 return;
             }
             hitboxVisualLines = hitboxLines;
@@ -603,12 +577,12 @@ namespace HitBoxVisualizerPlugin
             UpdateLineColorsToMatchStyle(lineStyle);
         }
 
-        public static lineDrawingStyle pickLineStyling(IPhysicsCollider DPhysObj, bool isLateUpdate=true)
+        public static lineDrawingStyle pickLineStyling(IPhysicsCollider DPhysObj/*, bool isLateUpdate=true*/)
         {
-            if (!isLateUpdate)
+            /*if (!isLateUpdate)
             {
                 return lineDrawingStyle.UpdateWithoutLateUpdate;
-            }
+            }*/
             if (!DPhysObj.enabled)
             {
                 return lineDrawingStyle.disabledPhys;
@@ -719,8 +693,8 @@ namespace HitBoxVisualizerPlugin
                 lineRenderer.loop = true;
                 lineRenderer.material = lineRendererBaseMaterial;
                 lineRenderer.colorGradient = lineGroup.getLineGradientForLineColors();
-                lineRenderer.startWidth = lineGroup.lineThickness;
-                lineRenderer.endWidth = lineGroup.lineThickness;
+                lineRenderer.startWidth = Plugin.drawingThickness;
+                lineRenderer.endWidth = Plugin.drawingThickness;
                 lineRenderer.positionCount = newPositions.Length;
                 lineRenderer.material.renderQueue = 4999;
                 lineRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
@@ -737,8 +711,13 @@ namespace HitBoxVisualizerPlugin
         // using LineRenderer.Simplify() and setting the line thickness set lower can help but the distortion is apparently impossible to fully remove
         // ============================================
         // so the solution is to create a bunch of LineRenderers and just use 1 line per linerenderer, as a simple point A to point B line doesn't have the distortion issue.
-        // this also means that a bunch of holder child objects must be created because GameObject can only hold 1 LineRenderer at a time
-        public static void drawLineGroupAsSplitIntoIndividualLines(List<hitboxLineGroup> lineGroups)
+        // this also means that a bunch of holder child objects must be created because GameObject can only hold 1 LineRenderer at a time.
+
+
+
+        // TODO: filter rects based on lineParentObj.activeSelf in calculateHitBoxShapeComponentLines()!
+        // keep them in the dict though until they are actually `Destroy()`ed
+        public static void drawLinesIndividuallyWithHolderGameObjects(List<hitboxLineGroup> lineGroups, List<hitboxVisualizerLine> isolatedLines)
         {
             int amountOfUsedHolderObjs = 0;
             listOfLineHolderGameObjs holderGameObjs = Plugin.poolOfLineHolderGameObjs;
@@ -764,7 +743,8 @@ namespace HitBoxVisualizerPlugin
                 for (int j = 0; j < amountOfLinesInGroup; j++)
                 {
                     var line = linesList[j];
-                    holderGameObjs.setLineRendererPropsAt(amountOfUsedHolderObjs, (Vector3)line.point1, (Vector3)line.point2, currLineGroup.lineThickness, line.lineColor, lineParentObj.activeSelf);
+                    holderGameObjs.setLineRendererPropsAt(amountOfUsedHolderObjs, (Vector3)line.point1, (Vector3)line.point2, Plugin.drawingThickness, line.lineColor,
+                        lineParentObj.activeSelf);
                     amountOfUsedHolderObjs++;
                 }
             }
@@ -775,8 +755,6 @@ namespace HitBoxVisualizerPlugin
             }
             // clear LineRenderer positions on any unused gameObjects, so that we don't get old lines still displaying on screen
             holderGameObjs.cleanUpOldLineRendererPositionsFromGameObjsAfter(amountOfUsedHolderObjs);
-
-            
         }
     }
 }
