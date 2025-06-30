@@ -9,6 +9,7 @@ using UnityEngine;
 using BoplFixedMath;
 using static HitBoxVisualizerPlugin.hitboxVisualizerLineStyling;
 using BepInEx.Configuration;
+using System.Xml.Serialization;
 
 
 namespace HitBoxVisualizerPlugin
@@ -22,7 +23,9 @@ namespace HitBoxVisualizerPlugin
         public static Dictionary<int, DPhysicsCircle> DPhysCircleDict = [];
         public static Dictionary<int, Circle> CirlceDict = [];
 
-        public static listOfLineHolderGameObjs poolOfLineHolderGameObjs = new listOfLineHolderGameObjs();
+        public static HitboxLineGroup DebugLineGroup;
+
+        public static ListOfLineHolderGameObjs poolOfLineHolderGameObjs = new ListOfLineHolderGameObjs();
 
         public ConfigEntry<float> CONFIG_drawingThickness;
 
@@ -34,13 +37,6 @@ namespace HitBoxVisualizerPlugin
         public static float drawingThickness = 0.5f;
         public static int circleDrawingMinAmountOfLines = 14;
 
-        public enum hitboxVisRenderImplementation
-        {
-            unityLineRenderObj
-        }
-        public static hitboxVisRenderImplementation currHitBoxVisRendImplementation = hitboxVisRenderImplementation.unityLineRenderObj;
-
-
         private readonly Harmony harmony = new Harmony("com.jo912345.hitboxVisualizePlugin");
 
         public void Awake()
@@ -49,6 +45,7 @@ namespace HitBoxVisualizerPlugin
 
             LineDrawing.setUpLineRendererMaterialToDefault();
             poolOfLineHolderGameObjs.setAllLineRendererMaterials(LineDrawing.lineRendererBaseMaterial);
+            DebugLineGroup = new HitboxLineGroup([], lineDrawingStyle.debugDefault);
 
             loadConfigValues();
             harmony.PatchAll();
@@ -90,6 +87,8 @@ namespace HitBoxVisualizerPlugin
                 "You may only use up to 7 colors (the gradient is looped), per the limitations of Unity's `Gradient` class.\n" +
                 "You can use #RGB, #RRGGBB, #RGBA, or #RRGGBBAA formatting, or one of the color words specified here:\n" +
                 "https://docs.unity3d.com/2022.3/Documentation/ScriptReference/ColorUtility.TryParseHtmlString.html");
+            // ADD UPDATE() COLORS!
+            // ADD A SETTING FOR SHOWING INACTIVE HITBOXES! not to be confused with disabled hitboxes.
 
             drawingStyleToLineColors[lineDrawingStyle.defaultColors] = loadConfigColorsFromString(CONFIG_rectColors.Value, "rectangleColors",
                 drawingStyleToLineColors[lineDrawingStyle.defaultColors], false);
@@ -129,9 +128,9 @@ namespace HitBoxVisualizerPlugin
 
         public void Start()
         {
-            // redundant, required for bopl 2.4.3+ for a non-zero minCapacity.
+            // poolOfLineHolderGameObjs = new ListOfLineHolderGameObjs(); is redundant here, required after bopl 2.4.3+ for a non-zero minCapacity.
             // extra game objects are cleaned up at boot by unity in newer versions.
-            poolOfLineHolderGameObjs = new listOfLineHolderGameObjs();
+            poolOfLineHolderGameObjs = new ListOfLineHolderGameObjs();
         }
 
         public void OnDestroy()
@@ -170,7 +169,7 @@ namespace HitBoxVisualizerPlugin
         // meteor for example will often seemingly "delete" hitboxes for a frame, but only if im not using both Update() and LateUpdate().
         // thing is that these hitboxes might not be fully "processed" by the game, so I may not want to draw them?
         // I've tried using both with Update() as only pink, but it doesn't seem to do anything; meteor can't disappear hitboxes, but it looks like no hitboxes get drawn as pink.
-        // it's also inconsistent, and it's really time consuming and annoying to record and check frame by frame with a video editor.
+        // meteor is also inconsistent-ish in deleting hitboxes, and it's really time consuming and annoying to record and check frame by frame with a video editor.
         // I'm tired of looking at clips frame by frame and there aren't any (good) TAS tools for this game (I've tested, libTAS has issues).
         // maybe I'll make a replay editor someday...
 
@@ -180,6 +179,7 @@ namespace HitBoxVisualizerPlugin
         // * Raycast
         // * Tools
 
+        // RE-ENABLING THIS WILL BREAK DELTA TIMES UNLESS IT'S SPECIFICALLY ACCOUNTED FOR!
         /*public void Update()
         {
             updateHitboxes();
@@ -195,27 +195,29 @@ namespace HitBoxVisualizerPlugin
         public void updateHitboxes()
         {
             PrintAllExternalLogsInQueue();
+            // TODO: add timer stuff for DebugLineGroup here! or add a constructor to HitboxLineGroup
+            // I would put that functionality in a class but i can't easily make the constructor cooperate because of the technically different type in the function param
 
-            var ListOflineGroupTuple = calculateHitBoxShapeComponentLines(DPhysBoxDict, DPhysCircleDict);
+            Tuple<List<HitboxLineGroup>, List<HitboxLineGroup>> ListOflineGroupTuple = calculateHitBoxShapeComponentLines(DPhysBoxDict, DPhysCircleDict);
             // circles already have very little distortion (likely due to their much shallower turns at each point)
             // and would also cost a ton of extra line holder game objects to render with 1 game object per line.
-            // rects
-            var HitboxComponentLines_NoDistortion = ListOflineGroupTuple.Item1;
+            // rectangles + DebugLines
+            List<HitboxLineGroup> HitboxComponentLines_NoDistortion = ListOflineGroupTuple.Item1;
+            HitboxComponentLines_NoDistortion.Add(DebugLineGroup);
             // circles
-            var HitboxComponentLines = ListOflineGroupTuple.Item2;
-
-
-            LineDrawing.drawLinesLineRender(HitboxComponentLines);
+            List<HitboxLineGroup> HitboxComponentLines = ListOflineGroupTuple.Item2;
+            
+            LineDrawing.drawLinesAsLineRendererPositions(HitboxComponentLines);
             LineDrawing.drawLinesIndividuallyWithHolderGameObjects(HitboxComponentLines_NoDistortion);
         }
 
 
-        public Tuple<List<hitboxLineGroup>, List<hitboxLineGroup>> calculateHitBoxShapeComponentLines(Dictionary<int, DPhysicsBox> inputDPhysBoxDict, Dictionary<int, DPhysicsCircle> inputDPhysCircleDict/*, bool isLateUpdate=true*/)
+        public Tuple<List<HitboxLineGroup>, List<HitboxLineGroup>> calculateHitBoxShapeComponentLines(Dictionary<int, DPhysicsBox> inputDPhysBoxDict, Dictionary<int, DPhysicsCircle> inputDPhysCircleDict/*, bool isLateUpdate=true*/)
         {
             // rects
-            var newHitboxLineGroups_NoDistortion = new List<hitboxLineGroup> ();
+            var newHitboxLineGroups_NoDistortion = new List<HitboxLineGroup> ();
             // circles
-            var newHitboxLineGroups_DistortionAllowed = new List<hitboxLineGroup>();
+            var newHitboxLineGroups_DistortionAllowed = new List<HitboxLineGroup>();
 
             // CALCULATE RECTS
             for (int i = 0; i < inputDPhysBoxDict.Values.ToList().Count; i++)
@@ -228,7 +230,11 @@ namespace HitBoxVisualizerPlugin
                     inputDPhysBoxDict.Remove(inputDPhysBoxDict.Keys.ToList()[i]);
                     continue;
                 }
-
+                if (!currBox.gameObject.activeSelf)
+                {
+                    continue;
+                }
+                
                 var boxOfCurrBox = currBox.Box();
                 var boxScale = currBox.Scale;
 
@@ -253,14 +259,14 @@ namespace HitBoxVisualizerPlugin
                 Vec2 boxPointUpRight   = boxScale * (boxPointCenter + boxPointUp + boxPointRight);
                 Vec2 boxPointDownRight = boxScale * (boxPointCenter - boxPointUp + boxPointRight);
 
-                hitboxVisualizerLine boxLineTop = new hitboxVisualizerLine(boxPointUpLeft, boxPointUpRight);
-                hitboxVisualizerLine boxLineRight = new hitboxVisualizerLine(boxPointUpRight, boxPointDownRight);
-                hitboxVisualizerLine boxLineBottom = new hitboxVisualizerLine(boxPointDownRight, boxPointDownLeft);
-                hitboxVisualizerLine boxLineLeft = new hitboxVisualizerLine(boxPointDownLeft, boxPointUpLeft);
+                HitboxVisualizerLine boxLineTop = new HitboxVisualizerLine(boxPointUpLeft, boxPointUpRight);
+                HitboxVisualizerLine boxLineRight = new HitboxVisualizerLine(boxPointUpRight, boxPointDownRight);
+                HitboxVisualizerLine boxLineBottom = new HitboxVisualizerLine(boxPointDownRight, boxPointDownLeft);
+                HitboxVisualizerLine boxLineLeft = new HitboxVisualizerLine(boxPointDownLeft, boxPointUpLeft);
                     
 
                 // make lines meet at the corners properly, and make their outer edge the real hitbox edge
-                hitboxVisualizerLine[] box_lines = [boxLineTop, boxLineRight, boxLineBottom, boxLineLeft];
+                HitboxVisualizerLine[] box_lines = [boxLineTop, boxLineRight, boxLineBottom, boxLineLeft];
                 for (int j = 0; j < box_lines.Length; j++)
                 {
                     Vector2 p1 = (Vector2)box_lines[j].point1;
@@ -272,16 +278,15 @@ namespace HitBoxVisualizerPlugin
                     box_lines[j].point2.y = box_lines[j].point2.y - ((Fix)drawingThickness / (Fix)2) * (Fix)Mathf.Sin((float)angleRadPlus2Pi);
                 }
 
-                newHitboxLineGroups_NoDistortion.Add(new hitboxLineGroup(
+                newHitboxLineGroups_NoDistortion.Add(new HitboxLineGroup(
                     [
                     boxLineTop,
                     boxLineRight,
                     boxLineBottom,
                     boxLineLeft,
                     ],
-                    hitboxLineGroup.pickLineStyling(currBox/*, isLateUpdate*/),
-                    currBox.gameObject,
-                    drawingThickness));
+                    HitboxLineGroup.pickLineStyling(currBox/*, isLateUpdate*/),
+                    currBox.gameObject));
             }
 
             // CALCULATE CIRCLES
@@ -294,6 +299,10 @@ namespace HitBoxVisualizerPlugin
                 {
                     inputDPhysCircleDict.Remove(inputDPhysCircleDict.Keys.ToList()[i]);
                     Logger.LogWarning("inputDPhysCircleDict.Values.ToList()[i] == null, removing from array. a round probably ended.");
+                    continue;
+                }
+                if (!currCircle.gameObject.activeSelf)
+                {
                     continue;
                 }
 
@@ -317,7 +326,7 @@ namespace HitBoxVisualizerPlugin
                 //Logger.LogInfo("circle radius: " + circleRadius.ToString() + " | circleLineAmount: " + circleLineAmount.ToString());
                 float angleDifferencePerIteration = 360f / (float)circleLineAmount;
 
-                List<hitboxVisualizerLine> currCircleLines = [];
+                List<HitboxVisualizerLine> currCircleLines = [];
                 // setup the initial first position so the loop can be simpler
                 // also yeah this just simplies down due to cos(0) = 1 and sin(0) = 0
                 Vec2 nextStartingCirclePoint = new Vec2(circleX+circleRadius, circleY);
@@ -330,12 +339,12 @@ namespace HitBoxVisualizerPlugin
                     float angle = j * angleDifferencePerIteration * Mathf.Deg2Rad;
                     
                     Vec2 newCirclePoint = new Vec2(circleX + (circleRadius * (Fix)Mathf.Cos(angle)), circleY + (circleRadius * (Fix)Mathf.Sin(angle)));
-                    currCircleLines.Add(new hitboxVisualizerLine(nextStartingCirclePoint, newCirclePoint));
+                    currCircleLines.Add(new HitboxVisualizerLine(nextStartingCirclePoint, newCirclePoint));
 
                     nextStartingCirclePoint = newCirclePoint;
                 }
 
-                newHitboxLineGroups_DistortionAllowed.Add(new hitboxLineGroup(currCircleLines, hitboxLineGroup.pickLineStyling(currCircle/*, isLateUpdate*/), currCircle.gameObject, drawingThickness));
+                newHitboxLineGroups_DistortionAllowed.Add(new HitboxLineGroup(currCircleLines, HitboxLineGroup.pickLineStyling(currCircle/*, isLateUpdate*/), currCircle.gameObject));
             }
 
             return Tuple.Create(newHitboxLineGroups_NoDistortion, newHitboxLineGroups_DistortionAllowed);
@@ -416,7 +425,20 @@ namespace HitBoxVisualizerPlugin
         }
     }
 
-    public class listOfLineHolderGameObjs
+    [HarmonyPatch(typeof(DetPhysics))]
+    class Patch_HitboxViewer_DetPhysicsRaycastHooks
+    {
+        [HarmonyPostfix]
+        [HarmonyPatch(nameof(DetPhysics.RaycastAll))]
+        static void Postfix_addPhysBoxDelHook(DetPhysics __instance)
+        {
+            Plugin.AddExternalLogPrintToQueue("origin: ");
+        }
+    }
+    // Debug.DrawLine and Debug.DrawRay may or may not be native methods (it looks like they're wrappers for the real external function).
+    // if they are I'll have to give them a transpiler and then give a postfix that goes after
+
+    public class ListOfLineHolderGameObjs
     {
         public List<GameObject> gameObjsList = new List<GameObject>();
         public int minCapacity = 4;
@@ -448,7 +470,7 @@ namespace HitBoxVisualizerPlugin
             }
         }
 
-        public listOfLineHolderGameObjs(bool useLineDrawingClassMaterial = true)
+        public ListOfLineHolderGameObjs(bool useLineDrawingClassMaterial = true)
         {
             if (useLineDrawingClassMaterial)
             {
@@ -457,13 +479,9 @@ namespace HitBoxVisualizerPlugin
             addGameObjects(minCapacity);
         }
 
-        public void setLineRendererPropsAt(int objListIndex, Vector3 startPos, Vector3 endPos, float thickness, Color lineColor, bool objIsActive = true)
+        public void setLineRendererPropsAt(int objListIndex, Vector3 startPos, Vector3 endPos, float thickness, Color lineColor/*, bool objIsActive = true*/)
         {
             var currGameObj = gameObjsList[objListIndex];
-
-            // if false this will also make the LineRenderer invisible
-            currGameObj.SetActive(objIsActive);
-
             currGameObj.TryGetComponent(out LineRenderer lineRenderer);
             lineRenderer.SetPositions([startPos, endPos]);
             lineRenderer.startWidth = thickness;
@@ -526,7 +544,8 @@ namespace HitBoxVisualizerPlugin
         {
             defaultColors,
             disabledPhys,
-            circleColors/*,
+            circleColors,
+            debugDefault/*,
             UpdateWithoutLateUpdate*/
         }
         public static Dictionary<lineDrawingStyle, List<Color>> drawingStyleToLineColors = new Dictionary<lineDrawingStyle, List<Color>>
@@ -534,45 +553,71 @@ namespace HitBoxVisualizerPlugin
             {lineDrawingStyle.defaultColors, [RedColor, YellowColor, GreenColor, BlueColor, MagentaColor]},
             {lineDrawingStyle.disabledPhys, [BlackColor, WhiteColor]},
             {lineDrawingStyle.circleColors, [RedColor, YellowColor, GreenColor, BlueColor, MagentaColor]},
+            {lineDrawingStyle.debugDefault, [MagentaColor]}
             /*{lineDrawingStyle.UpdateWithoutLateUpdate, [MagentaColor, MagentaColor, MagentaColor, MagentaColor] }*/
         };
     }
 
-    public class hitboxVisualizerLine
+    public class HitboxVisualizerLine
     {
 
         public Vec2 point1;
         public Vec2 point2;
         public Color lineColor;
-        public hitboxVisualizerLine(Vec2 point_1, Vec2 point_2)
+        public HitboxVisualizerLine(Vec2 point_1, Vec2 point_2)
         {
             point1 = point_1;
             point2 = point_2;
         }
+        public HitboxVisualizerLine(Vec2 point_1, Vec2 dir, Fix distance)
+        {
+            point1 = point_1;
+            point2 = point_1 + dir * distance;
+        }
     }
+
+    public class HitboxVisualizerDebugLine : HitboxVisualizerLine
+    {
+        public float lifetimeSeconds = 3f;
+        public float ageSeconds = 0f;
+        public HitboxVisualizerDebugLine(Vec2 point_1, Vec2 point_2, float drawSeconds_) : base(point_1, point_2)
+        {
+            lifetimeSeconds = drawSeconds_;
+        }
+        public HitboxVisualizerDebugLine(Vec2 point_1, Vec2 dir, Fix distance, float drawSeconds_) : base(point_1, dir, distance)
+        {
+            lifetimeSeconds = drawSeconds_;
+        }
+    }
+
     // because the lineRenderer implementation uses SetPositions() every time it's called to update and SetPositions() removes the old value (aka what a setter does),
     // if the lines aren't grouped together per object, the lines that are drawn later will completely overwrite the old lines for that object.
     // this means we either can only have 1 line per object or have to give it a list of lines so it can SetPositions() with all of the lines as 1 set.
     // (later)
     // BUT THEN, APPARENLTLY LINERENDERER IS ACTUALLY TERRIBLE AT DRAWING LINES!
     // ANYTHING MORE COMPLEX THAN JUST POINT A TO POINT B CREATES HIGHLY UGLY DISTORTION!
-    public class hitboxLineGroup
+    public class HitboxLineGroup
     {
-        public float lineThickness;
-        public List<hitboxVisualizerLine> hitboxVisualLines;
+        public List<HitboxVisualizerLine> groupLines;
         public GameObject parentGameObj;
         public lineDrawingStyle lineGroupStyle;
 
-        public hitboxLineGroup(List<hitboxVisualizerLine> hitboxLines, lineDrawingStyle lineStyle, GameObject parentGameObject, float lineWidth=0.5f)
+        public HitboxLineGroup(List<HitboxVisualizerLine> hitboxLines, lineDrawingStyle lineStyle, GameObject parentGameObject)
         {
             if (parentGameObject == null)
             {
                 Plugin.AddExternalLogPrintToQueue("hitboxLineGroup: parentGameObject == null");
                 return;
             }
-            hitboxVisualLines = hitboxLines;
+            groupLines = hitboxLines;
             parentGameObj = parentGameObject;
-            lineThickness = lineWidth;
+            lineGroupStyle = lineStyle;
+            UpdateLineColorsToMatchStyle(lineStyle);
+        }
+        public HitboxLineGroup(List<HitboxVisualizerLine> hitboxLines, lineDrawingStyle lineStyle)
+        {
+            groupLines = hitboxLines;
+            parentGameObj = null;
             lineGroupStyle = lineStyle;
             UpdateLineColorsToMatchStyle(lineStyle);
         }
@@ -599,13 +644,13 @@ namespace HitBoxVisualizerPlugin
             lineGroupStyle = lineStyle;
             var colorIndex = 0;
             var lineColors = drawingStyleToLineColors[lineGroupStyle];
-            for (int i = 0; i < hitboxVisualLines.Count; i++)
+            for (int i = 0; i < groupLines.Count; i++)
             {
                 if (colorIndex > lineColors.Count - 1)
                 {
                     colorIndex = 0;
                 }
-                var currLine = hitboxVisualLines[i];
+                var currLine = groupLines[i];
 
                 currLine.lineColor = lineColors[colorIndex];
 
@@ -617,11 +662,11 @@ namespace HitBoxVisualizerPlugin
         {
             List<Vector3> linePointsArray = [];
 
-            linePointsArray.Add(new Vector3((float)hitboxVisualLines[0].point1.x, (float)hitboxVisualLines[0].point1.y, 0));
+            linePointsArray.Add(new Vector3((float)groupLines[0].point1.x, (float)groupLines[0].point1.y, 0));
 
-            for (int i = 0; i < hitboxVisualLines.Count-1; i++)
+            for (int i = 0; i < groupLines.Count-1; i++)
             {
-                var currLine = hitboxVisualLines[i];
+                var currLine = groupLines[i];
                 linePointsArray.Add(new Vector3((float)currLine.point1.x, (float)currLine.point1.y, 0));
                 //linePointsArray.Add(new Vector3((float)currLine.point2.x, (float)currLine.point2.y, 0));
             }
@@ -651,6 +696,7 @@ namespace HitBoxVisualizerPlugin
             return lineGradient;
         }
     }
+
     public class LineDrawing
     {
         public static Material lineRendererBaseMaterial = new Material(Shader.Find("Legacy Shaders/Particles/Alpha Blended"));
@@ -664,7 +710,7 @@ namespace HitBoxVisualizerPlugin
             lineRendererBaseMaterial.SetInt("_ZTest", (int)UnityEngine.Rendering.CompareFunction.Always);
         }
 
-        public static void drawLinesLineRender(List<hitboxLineGroup> lineGroups)
+        public static void drawLinesAsLineRendererPositions(List<HitboxLineGroup> lineGroups)
         {
             for (int j = 0; j < lineGroups.Count; j++)
             {
@@ -711,29 +757,26 @@ namespace HitBoxVisualizerPlugin
         // using LineRenderer.Simplify() and setting the line thickness set lower can help but the distortion is apparently impossible to fully remove
         // ============================================
         // so the solution is to create a bunch of LineRenderers and just use 1 line per linerenderer, as a simple point A to point B line doesn't have the distortion issue.
-        // this also means that a bunch of holder child objects must be created because GameObject can only hold 1 LineRenderer at a time.
+        // this also means that a bunch of holder child objects must be created because GameObject can only hold 1 LineRenderer at a time.'
 
-
-
-        // TODO: filter rects based on lineParentObj.activeSelf in calculateHitBoxShapeComponentLines()!
-        // keep them in the dict though until they are actually `Destroy()`ed
-        public static void drawLinesIndividuallyWithHolderGameObjects(List<hitboxLineGroup> lineGroups, List<hitboxVisualizerLine> isolatedLines)
+        // DebugLines also use this function as one large line group because lines here don't need to be connected.
+        public static void drawLinesIndividuallyWithHolderGameObjects(List<HitboxLineGroup> lineGroups)
         {
             int amountOfUsedHolderObjs = 0;
-            listOfLineHolderGameObjs holderGameObjs = Plugin.poolOfLineHolderGameObjs;
+            ListOfLineHolderGameObjs holderGameObjs = Plugin.poolOfLineHolderGameObjs;
 
             for (int i = 0; i < lineGroups.Count; i++) {
 
                 var currLineGroup = lineGroups[i];
-                var lineParentObj = currLineGroup.parentGameObj;
+                /*var lineParentObj = currLineGroup.parentGameObj;
 
                 if (lineParentObj == null)
                 {
                     Plugin.AddExternalLogPrintToQueue("lineParentObj is null");
                     continue;
-                }
+                }*/
 
-                var linesList = currLineGroup.hitboxVisualLines;
+                var linesList = currLineGroup.groupLines;
                 var amountOfLinesInGroup = linesList.Count;
 
                 if (amountOfUsedHolderObjs + amountOfLinesInGroup > holderGameObjs.gameObjsList.Count)
@@ -743,8 +786,7 @@ namespace HitBoxVisualizerPlugin
                 for (int j = 0; j < amountOfLinesInGroup; j++)
                 {
                     var line = linesList[j];
-                    holderGameObjs.setLineRendererPropsAt(amountOfUsedHolderObjs, (Vector3)line.point1, (Vector3)line.point2, Plugin.drawingThickness, line.lineColor,
-                        lineParentObj.activeSelf);
+                    holderGameObjs.setLineRendererPropsAt(amountOfUsedHolderObjs, (Vector3)line.point1, (Vector3)line.point2, Plugin.drawingThickness, line.lineColor);
                     amountOfUsedHolderObjs++;
                 }
             }
