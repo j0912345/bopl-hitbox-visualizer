@@ -168,8 +168,14 @@ namespace HitBoxVisualizerPlugin
         // using both Update() and LateUpdate() might(?) increase accuracy for weird interframe stuff but it's genuinely hard to tell. 
         // meteor for example will often seemingly "delete" hitboxes for a frame, but only if im not using both Update() and LateUpdate().
         // thing is that these hitboxes might not be fully "processed" by the game, so I may not want to draw them?
-        // I've tried using both with Update() as only pink, but it doesn't seem to do anything; meteor can't disappear hitboxes, but it looks like no hitboxes get drawn as pink.
-        // meteor is also inconsistent-ish in deleting hitboxes, and it's really time consuming and annoying to record and check frame by frame with a video editor.
+        // I've tried using both with Update() drawing in magenta and LateUpdate() drawing normally, but this just creates more weirdness; meteor doesn't disappear hitboxes,
+        // but it looks like no hitboxes get drawn as pink. 
+
+        // WAIT IS IT BEING SET AS NOT ACTIVE?? (NOT TO BE CONFUSED WITH THE DISABLED BLACK AND WHITE)
+        // but then LateUpdate() shouldn't be overriding the color?
+        // another lead to check on.
+
+        // meteor seems to also be inconsistent-ish in deleting hitboxes, and it's really time consuming and annoying to record and check frame by frame with a video editor.
         // I'm tired of looking at clips frame by frame and there aren't any (good) TAS tools for this game (I've tested, libTAS has issues).
         // maybe I'll make a replay editor someday...
 
@@ -195,8 +201,8 @@ namespace HitBoxVisualizerPlugin
         public void updateHitboxes()
         {
             PrintAllExternalLogsInQueue();
-            // TODO: add timer stuff for DebugLineGroup here! or add a constructor to HitboxLineGroup
-            // I would put that functionality in a class but i can't easily make the constructor cooperate because of the technically different type in the function param
+            // Not being able to make an extension of HitboxLineGroup that uses List<HitboxVisualizerDebugLine> in the existing List<HitboxVisualizerLine> is making this a pain...
+            // Whatever, I'll just add the functionality to HitboxVisualizerLine and HitboxLineGroup.
 
             Tuple<List<HitboxLineGroup>, List<HitboxLineGroup>> ListOflineGroupTuple = calculateHitBoxShapeComponentLines(DPhysBoxDict, DPhysCircleDict);
             // circles already have very little distortion (likely due to their much shallower turns at each point)
@@ -430,9 +436,10 @@ namespace HitBoxVisualizerPlugin
     {
         [HarmonyPostfix]
         [HarmonyPatch(nameof(DetPhysics.RaycastAll))]
-        static void Postfix_addPhysBoxDelHook(DetPhysics __instance)
+        static void Postfix_addPhysBoxDelHook(Vec2 origin, Vec2 dir, Fix distance)
         {
-            Plugin.AddExternalLogPrintToQueue("origin: ");
+            Plugin.AddExternalLogPrintToQueue("DetPhysics.RaycastAll() origin: (" + origin.x.ToString() + ", " + origin.y.ToString() + ") | dir: (" + dir.x.ToString() + ", " + dir.y.ToString() + ") | distance: " + distance.ToString());
+            Plugin.DebugLineGroup.addLine(new HitboxVisualizerLine(origin, dir, distance, 3f));
         }
     }
     // Debug.DrawLine and Debug.DrawRay may or may not be native methods (it looks like they're wrappers for the real external function).
@@ -560,10 +567,13 @@ namespace HitBoxVisualizerPlugin
 
     public class HitboxVisualizerLine
     {
-
         public Vec2 point1;
         public Vec2 point2;
         public Color lineColor;
+        // ideally i would put this in a subclass but doing that would mean I also couldn't use all the stuff built around HitboxLineGroup for those lines
+        public bool hasLifeTimeout = false;
+        public float lifetimeSeconds = 3f;
+        public float ageSeconds = 0f;
         public HitboxVisualizerLine(Vec2 point_1, Vec2 point_2)
         {
             point1 = point_1;
@@ -574,22 +584,17 @@ namespace HitBoxVisualizerPlugin
             point1 = point_1;
             point2 = point_1 + dir * distance;
         }
-    }
-
-    public class HitboxVisualizerDebugLine : HitboxVisualizerLine
-    {
-        public float lifetimeSeconds = 3f;
-        public float ageSeconds = 0f;
-        public HitboxVisualizerDebugLine(Vec2 point_1, Vec2 point_2, float drawSeconds_) : base(point_1, point_2)
+        public HitboxVisualizerLine(Vec2 point_1, Vec2 point_2, float drawSeconds_) : this(point_1, point_2)
         {
             lifetimeSeconds = drawSeconds_;
+            hasLifeTimeout = true;
         }
-        public HitboxVisualizerDebugLine(Vec2 point_1, Vec2 dir, Fix distance, float drawSeconds_) : base(point_1, dir, distance)
+        public HitboxVisualizerLine(Vec2 point_1, Vec2 dir, Fix distance, float drawSeconds_) : this(point_1, dir, distance)
         {
             lifetimeSeconds = drawSeconds_;
+            hasLifeTimeout = true;
         }
     }
-
     // because the lineRenderer implementation uses SetPositions() every time it's called to update and SetPositions() removes the old value (aka what a setter does),
     // if the lines aren't grouped together per object, the lines that are drawn later will completely overwrite the old lines for that object.
     // this means we either can only have 1 line per object or have to give it a list of lines so it can SetPositions() with all of the lines as 1 set.
@@ -614,12 +619,19 @@ namespace HitBoxVisualizerPlugin
             lineGroupStyle = lineStyle;
             UpdateLineColorsToMatchStyle(lineStyle);
         }
+        // only used by DebugLines
         public HitboxLineGroup(List<HitboxVisualizerLine> hitboxLines, lineDrawingStyle lineStyle)
         {
             groupLines = hitboxLines;
             parentGameObj = null;
             lineGroupStyle = lineStyle;
             UpdateLineColorsToMatchStyle(lineStyle);
+        }
+        public void addLine(HitboxVisualizerLine line)
+        {
+            groupLines.Add(line);
+            // FIXME: this should probably not update all of the other raycasts.
+            UpdateLineColorsToMatchStyle(lineGroupStyle);
         }
 
         public static lineDrawingStyle pickLineStyling(IPhysicsCollider DPhysObj/*, bool isLateUpdate=true*/)
