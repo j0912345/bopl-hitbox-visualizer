@@ -165,20 +165,6 @@ namespace HitBoxVisualizerPlugin
             externalLogMessageQueue = [];
         }
 
-        // using both Update() and LateUpdate() might(?) increase accuracy for weird interframe stuff but it's genuinely hard to tell. 
-        // meteor for example will often seemingly "delete" hitboxes for a frame, but only if im not using both Update() and LateUpdate().
-        // thing is that these hitboxes might not be fully "processed" by the game, so I may not want to draw them?
-        // I've tried using both with Update() drawing in magenta and LateUpdate() drawing normally, but this just creates more weirdness; meteor doesn't disappear hitboxes,
-        // but it looks like no hitboxes get drawn as pink. 
-
-        // WAIT IS IT BEING SET AS NOT ACTIVE?? (NOT TO BE CONFUSED WITH THE DISABLED BLACK AND WHITE)
-        // but then LateUpdate() shouldn't be overriding the color?
-        // another lead to check on.
-
-        // meteor seems to also be inconsistent-ish in deleting hitboxes, and it's really time consuming and annoying to record and check frame by frame with a video editor.
-        // I'm tired of looking at clips frame by frame and there aren't any (good) TAS tools for this game (I've tested, libTAS has issues).
-        // maybe I'll make a replay editor someday...
-
         // TODO: add raycasts and make raycasted objects have a different hitbox color
         // there's raycasting/interesting stuff in:
         // * DetPhysics (mostly calls from Raycast?)
@@ -186,13 +172,14 @@ namespace HitBoxVisualizerPlugin
         // * Tools
 
         // RE-ENABLING THIS WILL BREAK DELTA TIMES UNLESS IT'S SPECIFICALLY ACCOUNTED FOR!
+        // at least if they're added when you're reading this
         /*public void Update()
         {
             updateHitboxes();
         }*/
 
         // <strikethrough>the lineRenderer lags behind if LateUpdate isn't used</strikethrough>
-        // nevermind, i guess not anymore? (currently writing during 2.5.0). maybe part of using values from the physics engine.
+        // nevermind, i guess not anymore? (currently writing during 2.5.0).
         public void LateUpdate()
         {
             updateHitboxes();
@@ -203,14 +190,14 @@ namespace HitBoxVisualizerPlugin
             PrintAllExternalLogsInQueue();
             // Not being able to make an extension of HitboxLineGroup that uses List<HitboxVisualizerDebugLine> in the existing List<HitboxVisualizerLine> is making this a pain...
             // Whatever, I'll just add the functionality to HitboxVisualizerLine and HitboxLineGroup.
-
             Tuple<List<HitboxLineGroup>, List<HitboxLineGroup>> ListOflineGroupTuple = calculateHitBoxShapeComponentLines(DPhysBoxDict, DPhysCircleDict);
-            // circles already have very little distortion (likely due to their much shallower turns at each point)
-            // and would also cost a ton of extra line holder game objects to render with 1 game object per line.
+
             // rectangles + DebugLines
             List<HitboxLineGroup> HitboxComponentLines_NoDistortion = ListOflineGroupTuple.Item1;
             HitboxComponentLines_NoDistortion.Add(DebugLineGroup);
             // circles
+            // circles already have very little distortion (likely due to their much shallower turns at each point)
+            // and would also cost a ton of extra line holder game objects to render with 1 game object per line.
             List<HitboxLineGroup> HitboxComponentLines = ListOflineGroupTuple.Item2;
             
             LineDrawing.drawLinesAsLineRendererPositions(HitboxComponentLines);
@@ -780,20 +767,13 @@ namespace HitBoxVisualizerPlugin
             for (int i = 0; i < lineGroups.Count; i++) {
 
                 var currLineGroup = lineGroups[i];
-                /*var lineParentObj = currLineGroup.parentGameObj;
-
-                if (lineParentObj == null)
-                {
-                    Plugin.AddExternalLogPrintToQueue("lineParentObj is null");
-                    continue;
-                }*/
 
                 var linesList = currLineGroup.groupLines;
                 var amountOfLinesInGroup = linesList.Count;
 
                 if (amountOfUsedHolderObjs + amountOfLinesInGroup > holderGameObjs.gameObjsList.Count)
                 {
-                    holderGameObjs.addGameObjects(amountOfLinesInGroup);
+                    holderGameObjs.addGameObjects(amountOfUsedHolderObjs + amountOfLinesInGroup - holderGameObjs.gameObjsList.Count);
                 }
                 for (int j = 0; j < amountOfLinesInGroup; j++)
                 {
@@ -803,11 +783,11 @@ namespace HitBoxVisualizerPlugin
                 }
             }
             // clean up any unused game objects
-            if ((amountOfUsedHolderObjs < holderGameObjs.gameObjsList.Count) && (holderGameObjs.gameObjsList.Count > holderGameObjs.minCapacity))
+            if ((amountOfUsedHolderObjs < holderGameObjs.gameObjsList.Count) && (amountOfUsedHolderObjs > holderGameObjs.minCapacity))
             {
-                holderGameObjs.deleteGameObjectsAfterIndex(holderGameObjs.minCapacity);
+                holderGameObjs.deleteGameObjectsAfterIndex(amountOfUsedHolderObjs);
             }
-            // clear LineRenderer positions on any unused gameObjects, so that we don't get old lines still displaying on screen
+            // clear LineRenderer positions on any unused gameObjects, so that we don't get old lines still displaying on screen.
             holderGameObjs.cleanUpOldLineRendererPositionsFromGameObjsAfter(amountOfUsedHolderObjs);
         }
     }
