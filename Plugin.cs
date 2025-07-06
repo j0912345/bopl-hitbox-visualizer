@@ -90,6 +90,11 @@ namespace HitBoxVisualizerPlugin
             // ADD UPDATE() COLORS!
             // ADD A SETTING FOR SHOWING INACTIVE HITBOXES! not to be confused with disabled hitboxes.
 
+            // TODO: add a string/flag/whatever for changing old defaults into new defaults. if i want to change some default line colors for example,
+            // i want to change the setting in existing installs if it has been left as the old default values. this should only run once (thus the flag),
+            // NEVER overwrite the user setting if they changed it from the default, and should run version specifically.
+
+
             drawingStyleToLineColors[lineDrawingStyle.defaultColors] = loadConfigColorsFromString(CONFIG_rectColors.Value, "rectangleColors",
                 drawingStyleToLineColors[lineDrawingStyle.defaultColors], false);
 
@@ -100,6 +105,8 @@ namespace HitBoxVisualizerPlugin
                 drawingStyleToLineColors[lineDrawingStyle.disabledPhys]);
 
             drawingThickness = CONFIG_drawingThickness.Value;
+
+            Logger.LogInfo(ColorUtility.ToHtmlStringRGBA(drawingStyleToLineColors[lineDrawingStyle.disabledPhys][0]));
         }
         public List<Color> loadConfigColorsFromString(String listString, String categoryName, List<Color> normalColors, bool gradientColorLimit = true)
         {
@@ -205,7 +212,7 @@ namespace HitBoxVisualizerPlugin
         }
 
 
-        public Tuple<List<HitboxLineGroup>, List<HitboxLineGroup>> calculateHitBoxShapeComponentLines(Dictionary<int, DPhysicsBox> inputDPhysBoxDict, Dictionary<int, DPhysicsCircle> inputDPhysCircleDict/*, bool isLateUpdate=true*/)
+        public Tuple<List<HitboxLineGroup>, List<HitboxLineGroup>> calculateHitBoxShapeComponentLines(Dictionary<int, DPhysicsBox> inputDPhysBoxDict, Dictionary<int, DPhysicsCircle> inputDPhysCircleDict)
         {
             // rects
             var newHitboxLineGroups_NoDistortion = new List<HitboxLineGroup> ();
@@ -278,7 +285,7 @@ namespace HitBoxVisualizerPlugin
                     boxLineBottom,
                     boxLineLeft,
                     ],
-                    HitboxLineGroup.pickLineStyling(currBox/*, isLateUpdate*/),
+                    HitboxLineGroup.pickLineStyling(currBox),
                     currBox.gameObject));
             }
 
@@ -324,9 +331,9 @@ namespace HitBoxVisualizerPlugin
                 // also yeah this just simplies down due to cos(0) = 1 and sin(0) = 0
                 Vec2 nextStartingCirclePoint = new Vec2(circleX+circleRadius, circleY);
 
-                // yes, j = 1 because nextStartingCirclePoint is already set
-                // we also add <strikethrough>+1</strikethrough> for circleDrawing_AmountOfLines because j starts at 1 instead of 0
-                //  I'm not sure why +2 fixes the last points not being drawn sometimes? this is required after I made the amount of lines scale with the radius.
+                // yes, j = 1 because nextStartingCirclePoint is already set.
+                // we also add <strikethrough>+1</strikethrough> for circleDrawing_AmountOfLines because j starts at 1 instead of 0.
+                // I'm not sure why +2 fixes the last points not being drawn sometimes? this is required after I made the amount of lines scale with the radius.
                 for (int j = 1; j < circleLineAmount + 2; j++)
                 {
                     float angle = j * angleDifferencePerIteration * Mathf.Deg2Rad;
@@ -337,7 +344,7 @@ namespace HitBoxVisualizerPlugin
                     nextStartingCirclePoint = newCirclePoint;
                 }
 
-                newHitboxLineGroups_DistortionAllowed.Add(new HitboxLineGroup(currCircleLines, HitboxLineGroup.pickLineStyling(currCircle/*, isLateUpdate*/), currCircle.gameObject));
+                newHitboxLineGroups_DistortionAllowed.Add(new HitboxLineGroup(currCircleLines, HitboxLineGroup.pickLineStyling(currCircle), currCircle.gameObject));
             }
 
             return Tuple.Create(newHitboxLineGroups_NoDistortion, newHitboxLineGroups_DistortionAllowed);
@@ -524,14 +531,26 @@ namespace HitBoxVisualizerPlugin
     {
         // these are constant but the values in drawingStyleToLineColors get overwritten when the config's color settings load.
         // if the config is invalid these'll be used as a fallback.
-        public static Color RedColor     = new Color(1, 0, 0, 1f);
-        public static Color BlueColor    = new Color(0, 0, 1, 1f);
-        public static Color GreenColor   = new Color(0, 1, 0, 1f);
-        public static Color YellowColor  = new Color(1, 0.92f, 0.016f, 1f);
-        public static Color MagentaColor = new Color(1, 0, 1, 1f);
-        public static Color WhiteColor   = new Color(1, 1, 1, 1f);
-        public static Color BlackColor   = new Color(0, 0, 0, 1f);
+        public static Color RedColor     = new Color(1, 0, 0, 0.8f);
+        public static Color BlueColor    = new Color(0, 0, 1, 0.8f);
+        public static Color GreenColor   = new Color(0, 1, 0, 0.8f);
+        public static Color YellowColor  = new Color(1, 0.92f, 0.016f, 0.8f);
+        public static Color MagentaColor = new Color(1, 0, 1, 0.8f);
+        public static Color WhiteColor   = new Color(1, 1, 1, 0.8f);
+        public static Color BlackColor   = new Color(0, 0, 0, 0.8f);
+
+
+
+
+
+
         // TODO: test using these instead of the pure white and black
+        // TODO: finish implementing this
+        
+        
+        
+
+
         public static Color DarkGrey     = new Color(0.2f, 0.2f, 0.2f, 1f);
         public static Color lightGrey    = new Color(0.8f, 0.8f, 0.8f, 1f);
         public enum lineDrawingStyle
@@ -547,7 +566,7 @@ namespace HitBoxVisualizerPlugin
             {lineDrawingStyle.defaultColors, [RedColor, YellowColor, GreenColor, BlueColor, MagentaColor]},
             {lineDrawingStyle.disabledPhys, [BlackColor, WhiteColor]},
             {lineDrawingStyle.circleColors, [RedColor, YellowColor, GreenColor, BlueColor, MagentaColor]},
-            {lineDrawingStyle.debugDefault, [MagentaColor]}
+            {lineDrawingStyle.debugDefault, [MagentaColor, DarkGrey, lightGrey]}
             /*{lineDrawingStyle.UpdateWithoutLateUpdate, [MagentaColor, MagentaColor, MagentaColor, MagentaColor] }*/
         };
     }
@@ -617,16 +636,11 @@ namespace HitBoxVisualizerPlugin
         public void addLine(HitboxVisualizerLine line)
         {
             groupLines.Add(line);
-            // FIXME: this should probably not update all of the other raycasts.
-            UpdateLineColorsToMatchStyle(lineGroupStyle);
+            UpdateOneLineColorToMatchStyle(lineGroupStyle, groupLines.Count - 1);
         }
 
-        public static lineDrawingStyle pickLineStyling(IPhysicsCollider DPhysObj/*, bool isLateUpdate=true*/)
+        public static lineDrawingStyle pickLineStyling(IPhysicsCollider DPhysObj)
         {
-            /*if (!isLateUpdate)
-            {
-                return lineDrawingStyle.UpdateWithoutLateUpdate;
-            }*/
             if (!DPhysObj.enabled)
             {
                 return lineDrawingStyle.disabledPhys;
@@ -636,6 +650,12 @@ namespace HitBoxVisualizerPlugin
                 return lineDrawingStyle.circleColors;
             }
             return lineDrawingStyle.defaultColors;
+        }
+
+        public void UpdateOneLineColorToMatchStyle(lineDrawingStyle lineStyle, int lineIndex)
+        {
+            var lineStyleColors = drawingStyleToLineColors[lineStyle];
+            groupLines[lineIndex].lineColor = lineStyleColors[(groupLines.Count - 1) % (lineStyleColors.Count)];
         }
 
         public void UpdateLineColorsToMatchStyle(lineDrawingStyle lineStyle)
@@ -756,7 +776,7 @@ namespace HitBoxVisualizerPlugin
         // using LineRenderer.Simplify() and setting the line thickness set lower can help but the distortion is apparently impossible to fully remove
         // ============================================
         // so the solution is to create a bunch of LineRenderers and just use 1 line per linerenderer, as a simple point A to point B line doesn't have the distortion issue.
-        // this also means that a bunch of holder child objects must be created because GameObject can only hold 1 LineRenderer at a time.'
+        // this also means that a bunch of holder child objects must be created because GameObject can only hold 1 LineRenderer at a time.
 
         // DebugLines also use this function as one large line group because lines here don't need to be connected.
         public static void drawLinesIndividuallyWithHolderGameObjects(List<HitboxLineGroup> lineGroups)
