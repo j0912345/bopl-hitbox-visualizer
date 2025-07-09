@@ -4,7 +4,7 @@
     <TargetFramework>net472</TargetFramework>
     <AssemblyName>HitBoxVisualizerPlugin</AssemblyName>
     <Description>A mod for bopl battle that draws lines around hitboxes.</Description>
-    <Version>3.0.0</Version>
+    <Version>3.1.0</Version>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <LangVersion>latest</LangVersion>
     <FileVersion>3.0.0.0</FileVersion>

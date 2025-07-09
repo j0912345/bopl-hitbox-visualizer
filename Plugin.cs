@@ -10,6 +10,8 @@ using BoplFixedMath;
 using static HitBoxVisualizerPlugin.hitboxVisualizerLineStyling;
 using BepInEx.Configuration;
 using System.Xml.Serialization;
+using TMPro;
+using UnityEngine.UIElements.Collections;
 
 
 namespace HitBoxVisualizerPlugin
@@ -32,6 +34,9 @@ namespace HitBoxVisualizerPlugin
         public ConfigEntry<String> CONFIG_rectColors;
         public ConfigEntry<String> CONFIG_circleColors;
         public ConfigEntry<String> CONFIG_disabledColors;
+
+        public ConfigEntry<bool> CONFIG_updateToNewDefaults;
+        public ConfigEntry<string> CONFIG_lastConfigVersion;
 
         public static List<object> externalLogMessageQueue = [];
         public static float drawingThickness = 0.5f;
@@ -82,19 +87,16 @@ namespace HitBoxVisualizerPlugin
             CONFIG_disabledColors = Config.Bind(
                 "Line Color Settings",
                 "disabledColors",
-                "#000000CC,#FFFFFFCC,#000000CC,#FFFFFFCC",
+                "#333333FF,#CCCCCCFF,#333333FF,#CCCCCCFF",
                 "What colors should disabled objects use? This includes rectanges and circles. Colors are separated by commas.\n" +
                 "You may only use up to 7 colors (the gradient is looped), per the limitations of Unity's `Gradient` class.\n" +
                 "You can use #RGB, #RRGGBB, #RGBA, or #RRGGBBAA formatting, or one of the color words specified here:\n" +
                 "https://docs.unity3d.com/2022.3/Documentation/ScriptReference/ColorUtility.TryParseHtmlString.html");
-            // ADD UPDATE() COLORS!
+
+
             // ADD A SETTING FOR SHOWING INACTIVE HITBOXES! not to be confused with disabled hitboxes.
 
-            // TODO: add a string/flag/whatever for changing old defaults into new defaults. if i want to change some default line colors for example,
-            // i want to change the setting in existing installs if it has been left as the old default values. this should only run once (thus the flag),
-            // NEVER overwrite the user setting if they changed it from the default, and should run version specifically.
-
-
+            // TODO: try using the key name here instead of a blind string
             drawingStyleToLineColors[lineDrawingStyle.defaultColors] = loadConfigColorsFromString(CONFIG_rectColors.Value, "rectangleColors",
                 drawingStyleToLineColors[lineDrawingStyle.defaultColors], false);
 
@@ -106,8 +108,71 @@ namespace HitBoxVisualizerPlugin
 
             drawingThickness = CONFIG_drawingThickness.Value;
 
+            // this whole system is kinda hacky (and quite overengineered) but the original `disabledPhys` colors didn't contrast very well in some places (mainly space maps) and
+            // I'm pretty sure most people don't mess with the config file. So to improve the experience for the average user, I've added this.
+            // this will only overwrite settings that were left in their default state and where updating to a new default is important enough to justify using this feature.
+            // { { "ver", { {"property name", <object value>}, {"propery name 2", <object value>} } } }
+
+            // PROBABLY REWORK THIS STRUCTURING!
+            var importantToOverrideConfigDefaults = new Dictionary<String, Dictionary<ConfigDefinition, object>>(){
+                { "3.0.0",  new Dictionary<ConfigDefinition, object>(){ {new ConfigDefinition("Line Color Settings", "disabledColors"), "#000000CC,#FFFFFFCC,#000000CC,#FFFFFFCC"} } }
+            };
+
+            CONFIG_updateToNewDefaults = Config.Bind(
+                "Default Reset Settings (ignore this section unless you know what you are doing)",
+                "AllowUpdateToNewDefaults",
+                true,
+                "Should the mod update settings left in a default state to a new default if an update changes the default for that setting?\n" +
+                "This will *NEVER* overwrite settings that were changed by the user.");
+
+            // 3.1.0 is the version that this setting was added, and 3.0.0 was the previous version.
+            CONFIG_lastConfigVersion = Config.Bind(
+                "Default Reset Settings (ignore this section unless you know what you are doing)",
+                "lastConfigVersion",
+                "3.0.0",
+                "What's the latest version of the mod that ran the default setting replacement logic? There should never be a reason to need to change this value manually.");
+
+            if (CONFIG_updateToNewDefaults.Value && versionString_IsGreater(PluginInfo.PLUGIN_VERSION, CONFIG_lastConfigVersion.Value) &&
+                importantToOverrideConfigDefaults.ContainsKey(PluginInfo.PLUGIN_VERSION))
+            {
+                var oldKeys = importantToOverrideConfigDefaults.Keys.ToArray();
+                for (int i = 0; i < oldKeys.Length; i++)
+                {
+                    if (Config.ContainsKey)
+                    {
+
+                    }
+                    // check if the current value is the old default
+                    // if so, replace it with the new default
+                }
+            }
+
             Logger.LogInfo(ColorUtility.ToHtmlStringRGBA(drawingStyleToLineColors[lineDrawingStyle.disabledPhys][0]));
         }
+
+        public bool versionString_IsGreater(string v1, string v2)
+        {
+            if (v1 == v2)
+            {
+                return false;
+            }
+            int[] v1Digits = Array.ConvertAll(v1.Split('.'), int.Parse);
+            int[] v2Digits = Array.ConvertAll(v2.Split('.'), int.Parse);
+            if (v1Digits.Length != v2Digits.Length)
+            {
+                throw new NotImplementedException("v1Digits.Length != v2Digits.Length. Comparing version strings of different lengths is unimplemented.");
+            }
+            int i = 0;
+            for (i = 0; i < v1Digits.Length; i++)
+            {
+                if (v1Digits[i] > v2Digits[i])
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         public List<Color> loadConfigColorsFromString(String listString, String categoryName, List<Color> normalColors, bool gradientColorLimit = true)
         {
             String[] colorStrings = listString.Split(',');
@@ -442,7 +507,7 @@ namespace HitBoxVisualizerPlugin
     public class ListOfLineHolderGameObjs
     {
         public List<GameObject> gameObjsList = new List<GameObject>();
-        public int minCapacity = 4;
+        public int minCapacity = 28;
         public int currUsedAmountOfGameObjs = 0;
         public Material lineMaterial = new Material(Shader.Find("Legacy Shaders/Particles/Alpha Blended"));
 
