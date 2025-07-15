@@ -12,6 +12,7 @@ using BepInEx.Configuration;
 using System.Xml.Serialization;
 using TMPro;
 using UnityEngine.UIElements.Collections;
+using BepInEx.Logging;
 
 
 namespace HitBoxVisualizerPlugin
@@ -38,14 +39,16 @@ namespace HitBoxVisualizerPlugin
         public ConfigEntry<bool> CONFIG_updateToNewDefaults;
         public ConfigEntry<string> CONFIG_lastConfigVersion;
 
-        public static List<object> externalLogMessageQueue = [];
         public static float drawingThickness = 0.5f;
         public static int circleDrawingMinAmountOfLines = 14;
+
+        public new static ManualLogSource Logger;
 
         private readonly Harmony harmony = new Harmony("com.jo912345.hitboxVisualizePlugin");
 
         public void Awake()
         {
+            Logger = base.Logger;
             Logger.LogInfo($"Plugin {PluginInfo.PLUGIN_GUID} is loaded!");
 
             LineDrawing.setUpLineRendererMaterialToDefault();
@@ -96,15 +99,9 @@ namespace HitBoxVisualizerPlugin
 
             // ADD A SETTING FOR SHOWING INACTIVE HITBOXES! not to be confused with disabled hitboxes.
 
-            // TODO: try using the key name here instead of a blind string
-            drawingStyleToLineColors[lineDrawingStyle.defaultColors] = loadConfigColorsFromString(CONFIG_rectColors.Value, "rectangleColors",
-                drawingStyleToLineColors[lineDrawingStyle.defaultColors], false);
-
-            drawingStyleToLineColors[lineDrawingStyle.circleColors] = loadConfigColorsFromString(CONFIG_circleColors.Value, "circleColors",
-                drawingStyleToLineColors[lineDrawingStyle.circleColors]);
-
-            drawingStyleToLineColors[lineDrawingStyle.disabledPhys] = loadConfigColorsFromString(CONFIG_disabledColors.Value, "disabledColors",
-                drawingStyleToLineColors[lineDrawingStyle.disabledPhys]);
+            drawingStyleToLineColors[lineDrawingStyle.defaultColors] = loadConfigColorsFromString(CONFIG_rectColors, drawingStyleToLineColors[lineDrawingStyle.defaultColors], false);
+            drawingStyleToLineColors[lineDrawingStyle.circleColors] = loadConfigColorsFromString(CONFIG_circleColors, drawingStyleToLineColors[lineDrawingStyle.circleColors]);
+            drawingStyleToLineColors[lineDrawingStyle.disabledPhys] = loadConfigColorsFromString(CONFIG_disabledColors, drawingStyleToLineColors[lineDrawingStyle.disabledPhys]);
 
             drawingThickness = CONFIG_drawingThickness.Value;
 
@@ -113,7 +110,6 @@ namespace HitBoxVisualizerPlugin
             // this will only overwrite settings that were left in their default state and where updating to a new default is important enough to justify using this feature.
             // { { "ver", { {"property name", <object value>}, {"propery name 2", <object value>} } } }
 
-            // PROBABLY REWORK THIS STRUCTURING!
             var importantToOverrideConfigDefaults = new Dictionary<String, Dictionary<ConfigDefinition, object>>(){
                 { "3.0.0",  new Dictionary<ConfigDefinition, object>(){ {new ConfigDefinition("Line Color Settings", "disabledColors"), "#000000CC,#FFFFFFCC,#000000CC,#FFFFFFCC"} } }
             };
@@ -130,9 +126,9 @@ namespace HitBoxVisualizerPlugin
                 "Default Reset Settings (ignore this section unless you know what you are doing)",
                 "lastConfigVersion",
                 "3.0.0",
-                "What's the latest version of the mod that ran the default setting replacement logic? There should never be a reason to need to change this value manually.");
+                "What's the latest version of the mod that ran the default setting replacement logic? This value shouldn't be changed manually.");
 
-            if (CONFIG_updateToNewDefaults.Value && versionString_IsGreater(PluginInfo.PLUGIN_VERSION, CONFIG_lastConfigVersion.Value) &&
+            /*if (CONFIG_updateToNewDefaults.Value && versionString_IsGreater(PluginInfo.PLUGIN_VERSION, CONFIG_lastConfigVersion.Value) &&
                 importantToOverrideConfigDefaults.ContainsKey(PluginInfo.PLUGIN_VERSION))
             {
                 var oldKeys = importantToOverrideConfigDefaults.Keys.ToArray();
@@ -145,7 +141,7 @@ namespace HitBoxVisualizerPlugin
                     // check if the current value is the old default
                     // if so, replace it with the new default
                 }
-            }
+            }*/
 
             Logger.LogInfo(ColorUtility.ToHtmlStringRGBA(drawingStyleToLineColors[lineDrawingStyle.disabledPhys][0]));
         }
@@ -173,8 +169,10 @@ namespace HitBoxVisualizerPlugin
             return false;
         }
 
-        public List<Color> loadConfigColorsFromString(String listString, String categoryName, List<Color> normalColors, bool gradientColorLimit = true)
+        public List<Color> loadConfigColorsFromString(ConfigEntry<String> selectedConfigEntry, List<Color> normalColors, bool gradientColorLimit = true)
         {
+            String listString = selectedConfigEntry.Value;
+            String categoryName = selectedConfigEntry.Definition.Key;
             String[] colorStrings = listString.Split(',');
             List<Color> colorList = new List<Color>();
             Color curColor = new Color();
@@ -211,32 +209,6 @@ namespace HitBoxVisualizerPlugin
             Logger.LogError("hitboxVisualizer has been unloaded. (if you see this when starting the game, it's likely that `HideManagerGameObject = false` in `BepInEx.cfg`. please enable it!)");
         }
 
-        public static void AddExternalLogPrintToQueue(object data)
-        {
-            //if (externalLogMessageQueue.Count+1 > externalLogMessageQueue.Capacity)
-            //{
-            //    return;
-            //}
-
-            if (externalLogMessageQueue == null)
-            {
-                externalLogMessageQueue = [];
-            }
-            externalLogMessageQueue.Add(data);
-        }
-        private void PrintAllExternalLogsInQueue(/*object sender*/)
-        {
-            //if (externalLogMessageQueue.Count > externalLogMessageQueue.Capacity)
-            //{
-            //    Logger.LogWarning("INTERNAL LOG QUEUE OVERFLOW! EXTRA MESSAGES WILL HAVE BEEN DISCARDED!");
-            //}
-            for (int i = 0; i < externalLogMessageQueue.Count; i++)
-            {
-                Logger.LogInfo(String.Concat("ASYNC* MESSAGE DUMP: ", externalLogMessageQueue[i].ToString()));
-            }
-            externalLogMessageQueue = [];
-        }
-
         // TODO: add raycasts and make raycasted objects have a different hitbox color
         // there's raycasting/interesting stuff in:
         // * DetPhysics (mostly calls from Raycast?)
@@ -259,7 +231,6 @@ namespace HitBoxVisualizerPlugin
 
         public void updateHitboxes()
         {
-            PrintAllExternalLogsInQueue();
             // Not being able to make an extension of HitboxLineGroup that uses List<HitboxVisualizerDebugLine> in the existing List<HitboxVisualizerLine> is making this a pain...
             // Whatever, I'll just add the functionality to HitboxVisualizerLine and HitboxLineGroup.
             Tuple<List<HitboxLineGroup>, List<HitboxLineGroup>> ListOflineGroupTuple = calculateHitBoxShapeComponentLines(DPhysBoxDict, DPhysCircleDict);
@@ -432,7 +403,7 @@ namespace HitBoxVisualizerPlugin
             {
                 return;
             }
-            Plugin.AddExternalLogPrintToQueue("adding instanceID DPhysicsBox to list:" + instanceID);
+            Plugin.Logger.LogInfo("adding instanceID DPhysicsBox to list:" + instanceID);
             Plugin.DPhysBoxDict.Add(instanceID, __instance);
         }
     }
@@ -454,7 +425,7 @@ namespace HitBoxVisualizerPlugin
                 return;
             }
 
-            Plugin.AddExternalLogPrintToQueue("adding instanceID DPhysicsCircle to list:" + instanceID);
+            Plugin.Logger.LogInfo("adding instanceID DPhysicsCircle to list:" + instanceID);
             Plugin.DPhysCircleDict.Add(instanceID, __instance);
         }
     }
@@ -479,13 +450,13 @@ namespace HitBoxVisualizerPlugin
             {
                 Plugin.DPhysBoxDict.Remove(__instance.GetInstanceID());
                 var instanceID = __instance.GetInstanceID();
-                Plugin.AddExternalLogPrintToQueue("removing instanceID DPhysicsBox from list:" + instanceID);
+                Plugin.Logger.LogInfo("removing instanceID DPhysicsBox from list:" + instanceID);
             }
             else if (instanceClassName == "DPhysicsCircle")
             {
                 Plugin.DPhysCircleDict.Remove(__instance.GetInstanceID());
                 var instanceID = __instance.GetInstanceID();
-                Plugin.AddExternalLogPrintToQueue("removing instanceID DPhysicsCircle from list:" + instanceID);
+                Plugin.Logger.LogInfo("removing instanceID DPhysicsCircle from list:" + instanceID);
             }
         }
     }
@@ -497,8 +468,8 @@ namespace HitBoxVisualizerPlugin
         [HarmonyPatch(nameof(DetPhysics.RaycastAll))]
         static void Postfix_addPhysBoxDelHook(Vec2 origin, Vec2 dir, Fix distance)
         {
-            Plugin.AddExternalLogPrintToQueue("DetPhysics.RaycastAll() origin: (" + origin.x.ToString() + ", " + origin.y.ToString() + ") | dir: (" + dir.x.ToString() + ", " + dir.y.ToString() + ") | distance: " + distance.ToString());
-            Plugin.DebugLineGroup.addLine(new HitboxVisualizerLine(origin, dir, distance, 3f));
+            /*Plugin.Logger.LogInfo("DetPhysics.RaycastAll() origin: (" + origin.x.ToString() + ", " + origin.y.ToString() + ") | dir: (" + dir.x.ToString() + ", " + dir.y.ToString() + ") | distance: " + distance.ToString());
+            Plugin.DebugLineGroup.addLine(new HitboxVisualizerLine(origin, dir, distance, 3f));*/
         }
     }
     // Debug.DrawLine and Debug.DrawRay may or may not be native methods (it looks like they're wrappers for the real external function).
@@ -682,7 +653,7 @@ namespace HitBoxVisualizerPlugin
         {
             if (parentGameObject == null)
             {
-                Plugin.AddExternalLogPrintToQueue("hitboxLineGroup: parentGameObject == null");
+                Plugin.Logger.LogInfo("hitboxLineGroup: parentGameObject == null");
                 return;
             }
             groupLines = hitboxLines;
@@ -803,7 +774,7 @@ namespace HitBoxVisualizerPlugin
 
                 if (lineParentObj == null)
                 {
-                    Plugin.AddExternalLogPrintToQueue("lineParentObj is null");
+                    Plugin.Logger.LogInfo("lineParentObj is null");
                     continue;
                 }
 
