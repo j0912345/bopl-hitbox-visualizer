@@ -231,14 +231,15 @@ namespace HitBoxVisualizerPlugin
         // nevermind, i guess not anymore? (currently writing during 2.5.0).
         public void LateUpdate()
         {
-            updateHitboxes();
+            updateHitboxes(Time.unscaledDeltaTime);
         }
 
-        public void updateHitboxes()
+        public void updateHitboxes(float deltaSeconds)
         {
             // Not being able to make an extension of HitboxLineGroup that uses List<HitboxVisualizerDebugLine> in the existing List<HitboxVisualizerLine> is making this a pain...
             // Whatever, I'll just add the functionality to HitboxVisualizerLine and HitboxLineGroup.
             Tuple<List<HitboxLineGroup>, List<HitboxLineGroup>> ListOflineGroupTuple = calculateHitBoxShapeComponentLines(DPhysBoxDict, DPhysCircleDict);
+            DebugLineGroup.TickLineLifetimes(deltaSeconds);
 
             // rectangles + DebugLines
             List<HitboxLineGroup> HitboxComponentLines_NoDistortion = ListOflineGroupTuple.Item1;
@@ -357,8 +358,8 @@ namespace HitBoxVisualizerPlugin
                 {
                     var physEngineCircleObj = DetPhysics.Get().circles.colliders[DetPhysics.Get().circles.ColliderIndex(currCircle.pp.instanceId)];
                     circleRadius = physEngineCircleObj.radius;
-                    circleX =      physEngineCircleObj.Pos().x;
-                    circleY =      physEngineCircleObj.Pos().y;
+                    circleX      = physEngineCircleObj.Pos().x;
+                    circleY      = physEngineCircleObj.Pos().y;
                 }
 
                 circleRadius -= (Fix)drawingThickness / (Fix)2;
@@ -473,8 +474,8 @@ namespace HitBoxVisualizerPlugin
         [HarmonyPatch(nameof(DetPhysics.RaycastAll))]
         static void Postfix_addPhysBoxDelHook(Vec2 origin, Vec2 dir, Fix distance)
         {
-            /*Plugin.Logger.LogInfo("DetPhysics.RaycastAll() origin: (" + origin.x.ToString() + ", " + origin.y.ToString() + ") | dir: (" + dir.x.ToString() + ", " + dir.y.ToString() + ") | distance: " + distance.ToString());
-            Plugin.DebugLineGroup.addLine(new HitboxVisualizerLine(origin, dir, distance, 3f));*/
+            Plugin.Logger.LogInfo("DetPhysics.RaycastAll() origin: (" + origin.x.ToString() + ", " + origin.y.ToString() + ") | dir: (" + dir.x.ToString() + ", " + dir.y.ToString() + ") | distance: " + distance.ToString());
+            Plugin.DebugLineGroup.AddLine(new HitboxVisualizerLine(origin, dir, distance, 3f));
         }
     }
     // Debug.DrawLine and Debug.DrawRay may or may not be native methods (it looks like they're wrappers for the real external function).
@@ -580,18 +581,6 @@ namespace HitBoxVisualizerPlugin
         public static Color WhiteColor   = new Color(1, 1, 1, 0.8f);
         public static Color BlackColor   = new Color(0, 0, 0, 0.8f);
 
-
-
-
-
-
-        // TODO: test using these instead of the pure white and black
-        // TODO: finish implementing this
-        
-        
-        
-
-
         public static Color DarkGrey     = new Color(0.2f, 0.2f, 0.2f, 1f);
         public static Color lightGrey    = new Color(0.8f, 0.8f, 0.8f, 1f);
         public enum lineDrawingStyle
@@ -666,6 +655,7 @@ namespace HitBoxVisualizerPlugin
             lineGroupStyle = lineStyle;
             UpdateLineColorsToMatchStyle(lineStyle);
         }
+
         // only used by DebugLines
         public HitboxLineGroup(List<HitboxVisualizerLine> hitboxLines, lineDrawingStyle lineStyle)
         {
@@ -674,10 +664,29 @@ namespace HitBoxVisualizerPlugin
             lineGroupStyle = lineStyle;
             UpdateLineColorsToMatchStyle(lineStyle);
         }
-        public void addLine(HitboxVisualizerLine line)
+
+        public void AddLine(HitboxVisualizerLine line)
         {
             groupLines.Add(line);
             UpdateOneLineColorToMatchStyle(lineGroupStyle, groupLines.Count - 1);
+        }
+
+        public void TickLineLifetimes(float deltaSeconds)
+        {
+            for (int i = 0; i < groupLines.Count; i++)
+            {
+                // at time of writing this function will only ever be called on debugLines, a line group where all lines have a set lifetime, so this if is technically redundant,
+                // for now.
+                if (groupLines[i].hasLifeTimeout)
+                {
+                    groupLines[i].ageSeconds += deltaSeconds;
+                    if (groupLines[i].ageSeconds > groupLines[i].lifetimeSeconds)
+                    {
+                        Plugin.Logger.LogInfo("groupLines.RemoveAt(" + i.ToString() + ")");
+                        groupLines.RemoveAt(i);
+                    }
+                }
+            }
         }
 
         public static lineDrawingStyle pickLineStyling(IPhysicsCollider DPhysObj)
@@ -718,7 +727,7 @@ namespace HitBoxVisualizerPlugin
             }
         }
 
-        public Vector3[] getListOfComponentPoints()
+        public Vector3[] GetListOfComponentPoints()
         {
             List<Vector3> linePointsArray = [];
 
@@ -733,7 +742,7 @@ namespace HitBoxVisualizerPlugin
             return linePointsArray.ToArray();
         }
 
-        public Gradient getLineGradientForLineColors()
+        public Gradient GetLineGradientForLineColors()
         {
             List<GradientColorKey> lineGradientColors = [];
             List<GradientAlphaKey> lineGradientAlphas = [];
@@ -793,12 +802,12 @@ namespace HitBoxVisualizerPlugin
                     lineRenderer = lineParentObj.AddComponent<LineRenderer>();
                 }
 
-                Vector3[] newPositions = lineGroup.getListOfComponentPoints();
+                Vector3[] newPositions = lineGroup.GetListOfComponentPoints();
                 // according to the unity project as decompiled by assetRipper, PostProcessing is the highest sorting layer in v2.3.4
                 lineRenderer.sortingLayerID = SortingLayer.NameToID("PostProcessing");
                 lineRenderer.loop = true;
                 lineRenderer.material = lineRendererBaseMaterial;
-                lineRenderer.colorGradient = lineGroup.getLineGradientForLineColors();
+                lineRenderer.colorGradient = lineGroup.GetLineGradientForLineColors();
                 lineRenderer.startWidth = Plugin.drawingThickness;
                 lineRenderer.endWidth = Plugin.drawingThickness;
                 lineRenderer.positionCount = newPositions.Length;
