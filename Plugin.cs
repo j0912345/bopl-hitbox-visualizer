@@ -96,20 +96,6 @@ namespace HitBoxVisualizerPlugin
                 "You can use #RGB, #RRGGBB, #RGBA, or #RRGGBBAA formatting, or one of the color words specified here:\n" +
                 "https://docs.unity3d.com/2022.3/Documentation/ScriptReference/ColorUtility.TryParseHtmlString.html");
 
-
-            // ADD A SETTING FOR SHOWING INACTIVE HITBOXES! not to be confused with disabled hitboxes.
-
-            drawingStyleToLineColors[lineDrawingStyle.defaultColors] = loadConfigColorsFromString(CONFIG_rectColors, drawingStyleToLineColors[lineDrawingStyle.defaultColors], false);
-            drawingStyleToLineColors[lineDrawingStyle.circleColors] = loadConfigColorsFromString(CONFIG_circleColors, drawingStyleToLineColors[lineDrawingStyle.circleColors]);
-            drawingStyleToLineColors[lineDrawingStyle.disabledPhys] = loadConfigColorsFromString(CONFIG_disabledColors, drawingStyleToLineColors[lineDrawingStyle.disabledPhys]);
-
-            drawingThickness = CONFIG_drawingThickness.Value;
-
-            // this whole system is kinda hacky (and quite overengineered) but the original `disabledPhys` colors didn't contrast very well in some places (mainly space maps) and
-            // I'm pretty sure most people don't mess with the config file. So to improve the experience for the average user, I've added this.
-            // this will only overwrite settings that were left in their default state and where updating to a new default is important enough to justify using this feature.
-            // { { "ver", { {"property name", <object value>}, {"propery name 2", <object value>} } } }
-
             var importantToOverrideConfigDefaults = new Dictionary<String, Dictionary<ConfigDefinition, object>>(){
                 { "3.0.0",  new Dictionary<ConfigDefinition, object>(){ {new ConfigDefinition("Line Color Settings", "disabledColors"), "#000000CC,#FFFFFFCC,#000000CC,#FFFFFFCC"} } }
             };
@@ -128,22 +114,41 @@ namespace HitBoxVisualizerPlugin
                 "3.0.0",
                 "What's the latest version of the mod that ran the default setting replacement logic? This value shouldn't be changed manually.");
 
-            /*if (CONFIG_updateToNewDefaults.Value && versionString_IsGreater(PluginInfo.PLUGIN_VERSION, CONFIG_lastConfigVersion.Value) &&
-                importantToOverrideConfigDefaults.ContainsKey(PluginInfo.PLUGIN_VERSION))
+            // this whole system is quite overengineered (and kinda hacky) but the original `disabledPhys` colors didn't contrast very well in some places (mainly space maps) and
+            // I'm pretty sure most people don't mess with the config file. So to improve the experience for the average user, I've added this.
+            // this will only overwrite settings that were left in their default state and where updating to a new default is important enough to justify using this feature.
+
+            if (CONFIG_updateToNewDefaults.Value && versionString_IsGreater(PluginInfo.PLUGIN_VERSION, CONFIG_lastConfigVersion.Value) &&
+                importantToOverrideConfigDefaults.ContainsKey(CONFIG_lastConfigVersion.Value))
             {
-                var oldKeys = importantToOverrideConfigDefaults.Keys.ToArray();
-                for (int i = 0; i < oldKeys.Length; i++)
+                Logger.LogInfo("Update detected! Old config values left in their default state may be updated. This behaviour can be disabled by setting `AllowUpdateToNewDefaults`"
+                    + " to false.");
+                Dictionary<ConfigDefinition, object> oldDefaults;
+                var keyExists = importantToOverrideConfigDefaults.TryGetValue(CONFIG_lastConfigVersion.Value, out oldDefaults);
+                if (!keyExists)
                 {
-                    if (Config.ContainsKey)
-                    {
-
-                    }
-                    // check if the current value is the old default
-                    // if so, replace it with the new default
+                    throw new InvalidOperationException("importantToOverrideConfigDefaults.TryGetValue() failed somehow despite literally just checking that importantToOverrideConfigDefaults.ContainsKey(CONFIG_lastConfigVersion.Value) is true");
                 }
-            }*/
+                var oldKeys = oldDefaults.Keys.ToArray();
+                for (int i = 0; i < oldDefaults.Keys.Count; i++)
+                {
+                    if (Config.ContainsKey(oldKeys[i]) && oldDefaults.Get(oldKeys[i]).Equals(Config.Get(oldKeys[i]).BoxedValue))
+                    {
+                        Logger.LogInfo("updated old, left-as-default setting `" + oldKeys[i].ToString() + "` from `" + Config.Get(oldKeys[i]).BoxedValue + "` to `"
+                            + Config.Get(oldKeys[i]).DefaultValue + "`!");
+                        Config.Get(oldKeys[i]).BoxedValue = Config.Get(oldKeys[i]).DefaultValue;
+                    }
+                }
+                CONFIG_lastConfigVersion.Value = PluginInfo.PLUGIN_VERSION;
+            }
 
-            Logger.LogInfo(ColorUtility.ToHtmlStringRGBA(drawingStyleToLineColors[lineDrawingStyle.disabledPhys][0]));
+            // ADD A SETTING FOR SHOWING INACTIVE HITBOXES! not to be confused with disabled hitboxes.
+
+            drawingStyleToLineColors[lineDrawingStyle.defaultColors] = loadConfigColorsFromString(CONFIG_rectColors, drawingStyleToLineColors[lineDrawingStyle.defaultColors], false);
+            drawingStyleToLineColors[lineDrawingStyle.circleColors] = loadConfigColorsFromString(CONFIG_circleColors, drawingStyleToLineColors[lineDrawingStyle.circleColors]);
+            drawingStyleToLineColors[lineDrawingStyle.disabledPhys] = loadConfigColorsFromString(CONFIG_disabledColors, drawingStyleToLineColors[lineDrawingStyle.disabledPhys]);
+
+            drawingThickness = CONFIG_drawingThickness.Value;
         }
 
         public bool versionString_IsGreater(string v1, string v2)
