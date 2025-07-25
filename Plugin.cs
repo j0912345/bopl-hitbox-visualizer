@@ -13,7 +13,7 @@ using System.Xml.Serialization;
 using TMPro;
 using UnityEngine.UIElements.Collections;
 using BepInEx.Logging;
-
+using UnityEngine.SceneManagement;
 
 namespace HitBoxVisualizerPlugin
 {
@@ -31,6 +31,7 @@ namespace HitBoxVisualizerPlugin
         public static ListOfLineHolderGameObjs poolOfLineHolderGameObjs = new ListOfLineHolderGameObjs();
 
         public ConfigEntry<float> CONFIG_drawingThickness;
+        public ConfigEntry<float> CONFIG_debugLineLifetime;
 
         public ConfigEntry<String> CONFIG_rectColors;
         public ConfigEntry<String> CONFIG_circleColors;
@@ -40,6 +41,7 @@ namespace HitBoxVisualizerPlugin
         public ConfigEntry<string> CONFIG_lastConfigVersion;
 
         public static float drawingThickness = 0.5f;
+        public static float debugLineLifetime = 1.5f;
         public static int circleDrawingMinAmountOfLines = 14;
 
         public new static ManualLogSource Logger;
@@ -52,9 +54,10 @@ namespace HitBoxVisualizerPlugin
             Logger.LogInfo($"Plugin {PluginInfo.PLUGIN_GUID} is loaded!");
 
             LineDrawing.setUpLineRendererMaterialToDefault();
-            poolOfLineHolderGameObjs.setAllLineRendererMaterials(LineDrawing.lineRendererBaseMaterial);
+            poolOfLineHolderGameObjs.SetAllLineRendererMaterials(LineDrawing.lineRendererBaseMaterial);
             DebugLineGroup = new HitboxLineGroup([], lineDrawingStyle.debugDefault);
 
+            SceneManager.activeSceneChanged += OnSceneChange;
             loadConfigValues();
             harmony.PatchAll();
             Logger.LogInfo("all `DPhysicsBox`es/`DPhysicsCircle`s should now have their hitboxes drawn!");
@@ -70,6 +73,13 @@ namespace HitBoxVisualizerPlugin
                 "How thick should hitbox lines be drawn? Note that this value is in unity world units and not pixels. For reference, 0.2 is relatively thin, and 0.5 is large.\n" +
                 "Rectangular hitboxes are now always drawn accurately, never extending past the real hitbox edge (excluding small artifacts caused by a lack of anti-aliasing)."
             );
+            CONFIG_debugLineLifetime = Config.Bind(
+                "Drawing Settings",
+                "debugLineLifetime",
+                1.5f,
+                "How many seconds should debug lines (ie non hitbox stuff like raycasts) live before being destroyed? This is purely visual."
+            );
+
 
             // line color settings
             CONFIG_rectColors = Config.Bind(
@@ -149,6 +159,7 @@ namespace HitBoxVisualizerPlugin
             drawingStyleToLineColors[lineDrawingStyle.disabledPhys] = loadConfigColorsFromString(CONFIG_disabledColors, drawingStyleToLineColors[lineDrawingStyle.disabledPhys]);
 
             drawingThickness = CONFIG_drawingThickness.Value;
+            debugLineLifetime = CONFIG_debugLineLifetime.Value;
         }
 
         public bool versionString_IsGreater(string v1, string v2)
@@ -210,15 +221,20 @@ namespace HitBoxVisualizerPlugin
 
         public void OnDestroy()
         {
+            SceneManager.activeSceneChanged -= OnSceneChange;
             harmony.UnpatchSelf();
             Logger.LogError("hitboxVisualizer has been unloaded. (if you see this when starting the game, it's likely that `HideManagerGameObject = false` in `BepInEx.cfg`. please enable it!)");
         }
 
-        // TODO: add raycasts and make raycasted objects have a different hitbox color
+        // TODO: add raycasts
         // there's raycasting/interesting stuff in:
         // * DetPhysics (mostly calls from Raycast?)
         // * Raycast
         // * Tools
+        // * everything that uses OnDrawGizmos()/related functions
+        //   * could I call these manually? (some of these call Debug.DrawLine())
+        //   * 
+        // - GameSessionHandler.DrawCross(), kinda
 
         // RE-ENABLING THIS WILL BREAK DELTA TIMES UNLESS IT'S SPECIFICALLY ACCOUNTED FOR!
         // at least if they're added when you're reading this
@@ -234,10 +250,13 @@ namespace HitBoxVisualizerPlugin
             updateHitboxes(Time.unscaledDeltaTime);
         }
 
+        public void OnSceneChange(Scene current, Scene next)
+        {
+            DebugLineGroup.groupLines.Clear();
+        }
+
         public void updateHitboxes(float deltaSeconds)
         {
-            // Not being able to make an extension of HitboxLineGroup that uses List<HitboxVisualizerDebugLine> in the existing List<HitboxVisualizerLine> is making this a pain...
-            // Whatever, I'll just add the functionality to HitboxVisualizerLine and HitboxLineGroup.
             Tuple<List<HitboxLineGroup>, List<HitboxLineGroup>> ListOflineGroupTuple = calculateHitBoxShapeComponentLines(DPhysBoxDict, DPhysCircleDict);
             DebugLineGroup.TickLineLifetimes(deltaSeconds);
 
@@ -472,23 +491,57 @@ namespace HitBoxVisualizerPlugin
     {
         [HarmonyPostfix]
         [HarmonyPatch(nameof(DetPhysics.RaycastAll))]
-        static void Postfix_addPhysBoxDelHook(Vec2 origin, Vec2 dir, Fix distance)
+        static void Postfix_DetPhysicsRaycastAll(Vec2 origin, Vec2 dir, Fix distance)
         {
-            Plugin.Logger.LogInfo("DetPhysics.RaycastAll() origin: (" + origin.x.ToString() + ", " + origin.y.ToString() + ") | dir: (" + dir.x.ToString() + ", " + dir.y.ToString() + ") | distance: " + distance.ToString());
-            Plugin.DebugLineGroup.AddLine(new HitboxVisualizerLine(origin, dir, distance, 3f));
+            Plugin.DebugLineGroup.AddLine(new HitboxVisualizerLine(origin, dir, distance, Plugin.debugLineLifetime));
         }
     }
+
+
+
+    // TODO: possibly use a transpiler to patch out whatever draws all of the moving airbone player tracking lines and just continue patching Debug.DrawLine()
+    // alternatively, I can also manually patch every function that uses Debug.DrawLine() and categorize them from there, but that would be a lot of work.
+    // either way it'll be annoying
+
+
+
+
+    // while i can patch Debug.DrawLine() directly, the lines that follow moving airbone players cover the screen way too much.
+    [HarmonyPatch(typeof(Debug))]
+    class Patch_HitboxViewer_DebugDraw
+    {
+        [HarmonyPostfix]
+        [HarmonyPatch(nameof(Debug.DrawLine), new[] { typeof(Vector3), typeof(Vector3) } )]
+        [HarmonyPatch(nameof(Debug.DrawLine), new[] { typeof(Vector3), typeof(Vector3), typeof(Color) })]
+        static void Postfix_DebugDrawLine(Vector3 start, Vector3 end)
+        {
+            Plugin.DebugLineGroup.AddLine(new HitboxVisualizerLine((Vec2)start, (Vec2)end, Plugin.debugLineLifetime));
+        }
+
+        [HarmonyPatch(nameof(Debug.DrawLine), new[] { typeof(Vector3), typeof(Vector3), typeof(Color), typeof(float) })]
+        [HarmonyPatch(nameof(Debug.DrawLine), new[] { typeof(Vector3), typeof(Vector3), typeof(Color), typeof(float), typeof(bool) })]
+        static void Postfix_DebugDrawLineWithDuration(Vector3 start, Vector3 end, float duration)
+        {
+            // movement visualization stuff tries to draw a bunch of lines every frame
+            float lifetime = Plugin.debugLineLifetime;
+            if (duration < lifetime) {
+                lifetime = duration;
+            }
+            Plugin.DebugLineGroup.AddLine(new HitboxVisualizerLine((Vec2)start, (Vec2)end, lifetime));
+        }
+    }
+
     // Debug.DrawLine and Debug.DrawRay may or may not be native methods (it looks like they're wrappers for the real external function).
     // if they are I'll have to give them a transpiler and then give a postfix that goes after
 
     public class ListOfLineHolderGameObjs
     {
         public List<GameObject> gameObjsList = new List<GameObject>();
-        public int minCapacity = 28;
+        public int minCapacity = 100;
         public int currUsedAmountOfGameObjs = 0;
         public Material lineMaterial = new Material(Shader.Find("Legacy Shaders/Particles/Alpha Blended"));
 
-        public void addGameObjects(int amount)
+        public void AddGameObjects(int amount)
         {
             for (int i = 0; i < amount; i++)
             {
@@ -504,7 +557,7 @@ namespace HitBoxVisualizerPlugin
             }
         }
 
-        public void setAllLineRendererMaterials(Material newMaterial)
+        public void SetAllLineRendererMaterials(Material newMaterial)
         {
             for (int i = 0; i < gameObjsList.Count; i++)
             {
@@ -519,10 +572,10 @@ namespace HitBoxVisualizerPlugin
             {
                 lineMaterial = LineDrawing.lineRendererBaseMaterial;
             }
-            addGameObjects(minCapacity);
+            AddGameObjects(minCapacity);
         }
 
-        public void setLineRendererPropsAt(int objListIndex, Vector3 startPos, Vector3 endPos, float thickness, Color lineColor/*, bool objIsActive = true*/)
+        public void SetLineRendererPropsAt(int objListIndex, Vector3 startPos, Vector3 endPos, float thickness, Color lineColor/*, bool objIsActive = true*/)
         {
             var currGameObj = gameObjsList[objListIndex];
             currGameObj.TryGetComponent(out LineRenderer lineRenderer);
@@ -534,7 +587,7 @@ namespace HitBoxVisualizerPlugin
             lineRenderer.forceRenderingOff = false;
         }
 
-        public void deleteGameObjectsAfterIndex(int baseIndex)
+        public void DeleteGameObjectsAfterIndex(int baseIndex)
         {
             var amountOfObjsToDelete = gameObjsList.Count - baseIndex;
             for (int i = 0; i < amountOfObjsToDelete; i++)
@@ -546,7 +599,7 @@ namespace HitBoxVisualizerPlugin
             }
         }
 
-        public void cleanUpOldLineRendererPositionsFromGameObjsAfter(int startIndex)
+        public void CleanUpOldLineRendererPositionsFromGameObjsAfter(int startIndex)
         {
             for (int i = startIndex; i < gameObjsList.Count; i++)
             {
@@ -558,7 +611,7 @@ namespace HitBoxVisualizerPlugin
             }
         }
 
-        public void cleanUpAllLineRenderers()
+        public void CleanUpAllLineRenderers()
         {
             for (int i = 0; i < gameObjsList.Count; i++)
             {
@@ -583,6 +636,8 @@ namespace HitBoxVisualizerPlugin
 
         public static Color DarkGrey     = new Color(0.2f, 0.2f, 0.2f, 1f);
         public static Color lightGrey    = new Color(0.8f, 0.8f, 0.8f, 1f);
+
+        public static Color transparent = new Color(1f, 1f, 1f, 0.4f);
         public enum lineDrawingStyle
         {
             defaultColors,
@@ -596,7 +651,7 @@ namespace HitBoxVisualizerPlugin
             {lineDrawingStyle.defaultColors, [RedColor, YellowColor, GreenColor, BlueColor, MagentaColor]},
             {lineDrawingStyle.disabledPhys, [BlackColor, WhiteColor]},
             {lineDrawingStyle.circleColors, [RedColor, YellowColor, GreenColor, BlueColor, MagentaColor]},
-            {lineDrawingStyle.debugDefault, [MagentaColor, DarkGrey, lightGrey]}
+            {lineDrawingStyle.debugDefault, [MagentaColor, lightGrey, DarkGrey]}
             /*{lineDrawingStyle.UpdateWithoutLateUpdate, [MagentaColor, MagentaColor, MagentaColor, MagentaColor] }*/
         };
     }
@@ -608,7 +663,7 @@ namespace HitBoxVisualizerPlugin
         public Color lineColor;
         // ideally i would put this in a subclass but doing that would mean I also couldn't use all the stuff built around HitboxLineGroup for those lines
         public bool hasLifeTimeout = false;
-        public float lifetimeSeconds = 3f;
+        public float lifetimeSeconds = 1.5f; // same length as XGunExplosion, thus lasting as long as the explosion hitbox does visually.
         public float ageSeconds = 0f;
         public HitboxVisualizerLine(Vec2 point_1, Vec2 point_2)
         {
@@ -675,14 +730,11 @@ namespace HitBoxVisualizerPlugin
         {
             for (int i = 0; i < groupLines.Count; i++)
             {
-                // at time of writing this function will only ever be called on debugLines, a line group where all lines have a set lifetime, so this if is technically redundant,
-                // for now.
                 if (groupLines[i].hasLifeTimeout)
                 {
                     groupLines[i].ageSeconds += deltaSeconds;
                     if (groupLines[i].ageSeconds > groupLines[i].lifetimeSeconds)
                     {
-                        Plugin.Logger.LogInfo("groupLines.RemoveAt(" + i.ToString() + ")");
                         groupLines.RemoveAt(i);
                     }
                 }
@@ -843,22 +895,30 @@ namespace HitBoxVisualizerPlugin
 
                 if (amountOfUsedHolderObjs + amountOfLinesInGroup > holderGameObjs.gameObjsList.Count)
                 {
-                    holderGameObjs.addGameObjects(amountOfUsedHolderObjs + amountOfLinesInGroup - holderGameObjs.gameObjsList.Count);
+                    holderGameObjs.AddGameObjects(amountOfUsedHolderObjs + amountOfLinesInGroup - holderGameObjs.gameObjsList.Count);
                 }
                 for (int j = 0; j < amountOfLinesInGroup; j++)
                 {
                     var line = linesList[j];
-                    holderGameObjs.setLineRendererPropsAt(amountOfUsedHolderObjs, (Vector3)line.point1, (Vector3)line.point2, Plugin.drawingThickness, line.lineColor);
+                    holderGameObjs.SetLineRendererPropsAt(amountOfUsedHolderObjs, (Vector3)line.point1, (Vector3)line.point2, Plugin.drawingThickness, line.lineColor);
                     amountOfUsedHolderObjs++;
                 }
             }
             // clean up any unused game objects
-            if ((amountOfUsedHolderObjs < holderGameObjs.gameObjsList.Count) && (amountOfUsedHolderObjs > holderGameObjs.minCapacity))
+            if ((amountOfUsedHolderObjs < holderGameObjs.gameObjsList.Count))
             {
-                holderGameObjs.deleteGameObjectsAfterIndex(amountOfUsedHolderObjs);
+                if (amountOfUsedHolderObjs > holderGameObjs.minCapacity)
+                {
+                    holderGameObjs.DeleteGameObjectsAfterIndex(amountOfUsedHolderObjs);
+                }
+                else
+                {
+                    holderGameObjs.DeleteGameObjectsAfterIndex(holderGameObjs.minCapacity);
+                }
             }
             // clear LineRenderer positions on any unused gameObjects, so that we don't get old lines still displaying on screen.
-            holderGameObjs.cleanUpOldLineRendererPositionsFromGameObjsAfter(amountOfUsedHolderObjs);
+            holderGameObjs.CleanUpOldLineRendererPositionsFromGameObjsAfter(amountOfUsedHolderObjs);
+            Plugin.Logger.LogInfo("amount of GameObjects being used: " + holderGameObjs.gameObjsList.Count);
         }
     }
 }
